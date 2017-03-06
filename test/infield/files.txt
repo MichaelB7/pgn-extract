@@ -1,0 +1,2 @@
+infiles/test-f1.pgn
+infiles/test-f2.pgn

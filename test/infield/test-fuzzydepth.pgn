@@ -1,0 +1,4 @@
+e4 e5 Nf3 Nc6 Bb5 *
+Nf3 Nc6 e4 e5 { Match game 1 at 4 ply. } Bc4 *
+e4 e5 Nf3 { Match game 1 at 3 and 4 ply. } Nc6 d4 *
+e4 e5 Bb5 Nc6 Nf3 { Match game 1 at 5 ply. } *
