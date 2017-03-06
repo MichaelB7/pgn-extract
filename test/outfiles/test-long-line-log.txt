@@ -1,0 +1,6 @@
+Processing infiles/test-long-line.pgn
+String length 139 is too long for the line length of 75:
+only-a-fool-would-play-this-move-and-only-someone-wanting-to-test-how-the-program-copes-with-very-long-lines-would-type-a-comment-like-this
+? - ? ? ? ????.??.?? 
+? - ? ? ? ????.??.?? 
+1 game matched out of 1.

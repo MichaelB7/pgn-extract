@@ -1,0 +1,12 @@
+{ From: infiles/test-fuzzydepth.pgn }
+{ First found in: infiles/test-fuzzydepth.pgn }
+[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+
+1. e4 e5 2. Bb5 Nc6 3. Nf3 { Match game 1 at 5 ply. } *
+

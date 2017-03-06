@@ -1,0 +1,12 @@
+[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "0-1"]
+
+1. f3 e5 2. g4 {
+only-a-fool-would-play-this-move-and-only-someone-wanting-to-test-how-the-program-copes-with-very-long-lines-would-type-a-comment-like-this
+} 2... Qh4# 0-1
+

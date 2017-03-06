@@ -1,0 +1,6 @@
+Processing infiles/test-L1.pgn
+? - ? ? ? ????.??.?? 
+1 game matched out of 1.
+Processing infiles/test-L2.pgn
+Barnes, David J. - Horton, Mark Dover vs Herne Bay, Minor League Margate Chess Club 1994.10.10 
+1 game matched out of 1.

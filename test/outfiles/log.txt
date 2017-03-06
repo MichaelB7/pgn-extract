@@ -1,0 +1,36 @@
+Processing infiles/fischer.pgn
+Fischer, Robert J. - Kampars, N. Milwaukee Northwestern ? 1957 
+Fischer, Robert J. - Addison, William G. US Open ? 1957 
+Fischer, Robert J. - Goldsmith, Julius West Orange Open ? 1957 
+Fischer, Robert J. - Cardoso, Rudolfo T. Bad Portoroz Interzonal ? 1958 
+Fischer, Robert J. - Weinstein, Raymond USA Championship ? 1959 
+Fischer, Robert J. - Benko, Pal Yugoslavia Candidate Trn ? 1959 
+Fischer, Robert J. - Keres, Paul Yugoslavia Candidate Trn ? 1959 
+Fischer, Robert J. - Keres, Paul Yugoslavia Candidate Trn ? 1959 
+Fischer, Robert J. - Olafsson, Fridrik Yugoslavia Candidate Trn ? 1959 
+Fischer, Robert J. - Smyslov, Vasily V. Yugoslavia Candidate Trn ? 1959 
+Fischer, R. - Petrosian, T. ? Yugoslavia, Bled 1959.??.?? 
+Fischer, R. - Petrosian, T. ? Yugoslavia, Zagreb 1959.??.?? 
+Fischer, Robert J. - Larsen, Bent Zurich ? 1959 
+Fischer, Robert J. - Foguelman, Alberto Buenos Aires ? 1960 
+Fischer, Robert J. - Ivkov, Boris Buenos Aires ? 1960 
+Fischer, Robert J. - Euwe, Max Leipzig Olympiad Final ? 1960 
+Fischer, Robert J. - Keres, Paul Bled ? 1961 
+Fischer, Robert J. - Petrosian, Tigran V. Bled ? 1961 
+Fischer, Robert J. - Barcza, Gedeon Stockholm Interzonal ? 1962 
+Fischer, Robert J. - Donner, Jan H. Varna Olympiad Final ? 1962 
+Fischer, Robert J. - Steinmeyer, Robert H. USA Championship ? 1963 
+Fischer, Robert J. - Panov, Vasil Skopje ? 1967 
+Fischer, Robert J. - Cagan, Shimon Nathania ? 1968 
+Fischer, Robert J. - Czerniak, Moshe Nathania ? 1968 
+Fischer, Robert J. - Yanofsky, Daniel A. Nathania ? 1968 
+Fischer, Robert J. - Hort, Vlastimil Vinkovci ? 1968 
+Fischer, Robert J. - Hubner, Robert Palma de Mallorca ? 1970 
+Fischer, Robert J. - Hort, Vlastimil Siegen Olympiad Final ? 1970 
+Fischer, Robert J. - Ibrahimoglu, Ismet Siegen Olympiad Prelim ? 1970 
+Fischer, Robert J. - Petrosian, Tigran V. USSR-World ? 1970 
+Fischer, Robert J. - Petrosian, Tigran V. USSR-World ? 1970 
+Fischer, Robert J. - Marovic, Drazen Zabreb ? 1970 
+Fischer, Robert J. - Portisch, Lajos ? Stockholm 1962.??.?? 
+Fischer, Robert J. - Keres, Paul ? Yugoslavia ct 1959.??.?? 
+34 games matched out of 34.

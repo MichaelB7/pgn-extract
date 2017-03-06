@@ -1,0 +1,15 @@
+Processing infiles/test-r.txt
+No king move possible to f2.
+File infiles/test-r.txt: Line number: 1
+Failed to make move 3. Kf2 in the game:
+rnb.kbnr
+pppp.ppp
+........
+....p...
+......Pq
+.....P..
+PPPPP..P
+RNBQKBNR
+
+
+0 games matched out of 1.
