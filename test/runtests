@@ -1,0 +1,428 @@
+#!/bin/bash
+# Script to run a battery of tests of the basic functionality of pgn-extract
+# Copyright (C) David J. Barnes, 2013
+
+# Location of the file of ECO classifications.
+ECO_FILE="../eco.pgn"
+export ECO_FILE
+
+# Location of the test input files
+INPUT="infiles"
+
+# Test template:
+# 
+#     + Input file containing games with 
+#     - Input file(s):
+#     - Resulting output ...
+#     - Expected output: ...
+#     - Command: pgn-extract ...
+
+# No flags:
+#     + No input file.
+#     - Input file(s): N/A
+#     - Example input:
+#       f3 e5 g4 Qh4 0-1
+#     - Resulting output should be that the game input on standard input is
+#       formatted as PGN on standard output.
+#     - Expected output: 
+#       Contents of fools-mate.pgn on standard output.
+../pgn-extract < $INPUT/fools-mate.txt
+
+# No flags:
+#     + Single input file
+#     - Input file(s): fools-mate.txt
+#     - Resulting output should be the input formatted as PGN on standard output.
+#     - Expected output: Contents of fools-mate.pgn should appear on standard output.
+../pgn-extract $INPUT/fools-mate.txt
+
+# -7 / --seven
+#     + Input file with games having tags additional to the seven tag roster.
+#     - Input file(s): test-7.pgn
+#     - Game output should have only the tags of the seven tag roster.
+#     - Expected output: test-7-out.pgn
+../pgn-extract -7 -otest-7-out.pgn $INPUT/test-7.pgn
+
+# -a / --append
+#     + Input file containing games in any accepted format.
+#     - Input file(s): test-a.txt
+#     - Resulting output should contain two versions of the input game
+#       formatted in PGN. The --output command is run first to create
+#       a new file, then the -a version to append to that file.
+#     - Expected output: test-a-out.pgn
+../pgn-extract --output test-a-out.pgn $INPUT/test-a.txt
+../pgn-extract -atest-a-out.pgn $INPUT/test-a.txt
+
+../pgn-extract --output test-a-out.pgn $INPUT/test-a.txt
+../pgn-extract --append test-a-out.pgn $INPUT/test-a.txt
+
+# -A
+#     + Input file containing games and a file of arguments.
+#     - Input file(s): fischer.pgn, petrosian.pgn, arglist.txt
+#     - Resulting output should be files separating the unique and
+#       duplicated games in the input files.
+#     - Expected output: test-A-unique.pgn, test-A-dupes.pgn
+../pgn-extract -A$INPUT/argslist.txt
+
+# -b
+#     + Input file containing games of different length.
+#     - Input file(s): fischer.pgn
+#     - Resulting output: games whose number of moves is within
+#       the specified bounds.
+# 
+#     - Expected output: 45 moves or more: fischer-bl45-out.pgn
+../pgn-extract -bl45 -ofischer-bl45-out.pgn $INPUT/fischer.pgn
+
+#     - Expected output: 45 moves or less: fischer-bu45-out.pgn
+../pgn-extract -bu45 -ofischer-bu45-out.pgn $INPUT/fischer.pgn
+
+#     - Expected output: exactly 30 moves: fischer-b30-out.pgn
+../pgn-extract -b30 -ofischer-b30-out.pgn $INPUT/fischer.pgn
+
+# 
+# -c / --checkfile
+#     + Input files containing games.
+#     - Input file(s): fischer.pgn, petrosian.pgn
+#     - Resulting output should contain matched games that do not already occur in
+#       the check file.
+#     - Expected output: test-c-out.pgn
+../pgn-extract -c$INPUT/petrosian.pgn -D -TpPetrosian -otest-c-out.pgn $INPUT/fischer.pgn
+../pgn-extract -c$INPUT/clist.txt -D -TpPetrosian -otest-c-out.pgn $INPUT/fischer.pgn
+
+# -C / --nocomments
+#     + Input file containing games with comments
+#     - Input file(s): test-C.pgn
+#     - Resulting output should have all comments removed.
+#     - Expected output: test-C-out.pgn
+../pgn-extract -C -otest-C-out.pgn $INPUT/test-C.pgn
+
+# -d / --duplicates
+#     + Input file containing games with duplicates and non-duplicates.
+#     - Input file(s): fischer.pgn, $INPUT/petrosian.pgn
+#     - Resulting output should be files separating the unique and
+#       duplicated games in the input files.
+#     - Expected output: test-d-unique.pgn, test-d-dupes.pgn
+../pgn-extract -dtest-d-dupes.pgn -otest-d-unique.pgn $INPUT/fischer.pgn $INPUT/petrosian.pgn
+
+# -D / --noduplicates
+#     + Input file containing games with duplicates and non-duplicates.
+#     - Input file(s): fischer.pgn, $INPUT/petrosian.pgn
+#     - Resulting output should be a file containing the combined input
+#       with duplicate games removed.
+#     - Expected output: test-D-unique.pgn
+../pgn-extract -D -otest-D-unique.pgn $INPUT/fischer.pgn $INPUT/petrosian.pgn
+../pgn-extract --noduplicates -otest-D-unique.pgn $INPUT/fischer.pgn $INPUT/petrosian.pgn
+
+# -e
+#     + Input file containing games without ECO classifications.
+#     - Input file(s): test-e.pgn and eco.pgn in the test folder.
+#     - Resulting output should have ECO classification added to the tags.
+#     - Expected output: test-e-out.pgn
+../pgn-extract -e -otest-e-out.pgn $INPUT/test-e.pgn
+../pgn-extract -e$ECO_FILE -otest-e-out.pgn $INPUT/test-e.pgn
+
+# -E
+#     + Input file containing games.
+#     - Input file(s): test-E.pgn and eco.pgn if -e flag is used.
+#     - Resulting output should be separate files for each ECO classification
+#       at the level of the initial letter (A-E).
+#     - Expected output: A.pgn, B.pgn, E.pgn
+../pgn-extract -e -E1 $INPUT/test-E.pgn
+
+# -f
+#     + Input files containing games.
+#     - Input file(s): test-f1.pgn, test-f2.pgn, files.txt
+#     - Resulting output should be the combination of the input files.
+#     - Expected output: test-f-out.pgn
+../pgn-extract -f$INPUT/files.txt -otest-f-out.pgn
+
+# -F:
+#     + Input file containing games without a trailing FEN comment.
+#     - Input file(s): test-F.pgn
+#     - Resulting output should have a comment at the end containing
+#       the FEN description of the final position.
+#     - Expected output: test-F-out.pgn
+../pgn-extract -F -otest-F-out.pgn $INPUT/test-F.pgn
+
+# 
+# -h / -? / --help
+#     + No input required.
+#     - Input file(s): N/A
+#     - Resulting output should be a description of how to use pgn-extract
+#     - Expected output: N/A
+../pgn-extract -h
+# ../pgn-extract -?
+# ../pgn-extract --help
+
+# -l
+#     + Input file containing games.
+#     - Input file(s): fischer.pgn
+#     - Resulting output: List of games parsed written to log.txt
+#     - Expected output: log.txt
+../pgn-extract -llog.txt -otest-l-out.pgn $INPUT/fischer.pgn
+
+# -L
+#     + Input file containing games.
+#     - Input file(s): test-L1.pgn, test-L2.pgn
+#     - Resulting output should be that log.txt contains the combined
+#       logs from two runs of pgn-extract.
+#     - Expected output: log.txt
+../pgn-extract -llog.txt -r $INPUT/test-L1.pgn
+../pgn-extract -Llog.txt -r $INPUT/test-L2.pgn
+
+# -M / --checkmate
+#     + Input file containing games.
+#     - Input file(s): test-checkmate.pgn
+#     - Resulting output should contain only those games that end in checkmate.
+#     - Expected output: test-checkmate-out.pgn
+../pgn-extract --checkmate -otest-checkmate-out.pgn $INPUT/test-checkmate.pgn
+
+# -n
+#     + Input file containing games.
+#     - Input file(s): petrosian.pgn
+#     - Resulting output should be separate files containing matched
+#       and non-matched games.
+#     - Expected output: test-n-matched.pgn, test-n-unmatched.pgn
+../pgn-extract -TpFischer -otest-n-matched.pgn -ntest-n-unmatched.pgn $INPUT/petrosian.pgn
+
+# -N / --nonags
+#     + Input file containing games with NAGs.
+#     - Input file(s): test-N.pgn
+#     - Resulting output should have all NAGs removed.
+#     - Expected output: test-N-out.pgn
+../pgn-extract -N -otest-N-out.pgn $INPUT/test-N.pgn
+
+# 
+# -o / --output
+#     + Input file containing games in any accepted format.
+#     - Input file(s): test-o.txt
+#     - Resulting output should contain the input game formatted in PGN.
+#     - Expected output: test-o-out.pgn
+../pgn-extract -otest-o-out.pgn $INPUT/test-o.txt
+../pgn-extract --output test-o-out.pgn $INPUT/test-o.txt
+
+# -P
+#     + Input file containing games with different sequences for the same
+#       opening.
+#     - Input file(s): test-P.pgn, Pvars.txt
+#     - Resulting output should be games whose opening move exactly match
+#       the sequence specified in Pvars.txt
+#     - Expected output: test-P-out.pgn
+../pgn-extract -P -v$INPUT/Pvars.txt -otest-P-out.pgn $INPUT/test-P.pgn
+
+# -r
+#     + Input file containing games in any accepted format.
+#     - Input file(s): test-r.text
+#     - Resulting output should contain tag summary lines for the games
+#       matched and a report of any errors.
+#     - Expected output: test-r-log.text
+../pgn-extract -r -Ltest-r-log.txt $INPUT/test-r.txt
+
+# -R
+#     + Input file containing games.
+#     - Input file(s): test-R.pgn, roster.txt
+#     - Resulting output should contain games with their tag roster in
+#       the order specified in roster.txt
+#     - Expected output: test-R-out.pgn
+../pgn-extract -R$INPUT/roster.txt --output test-R-out.pgn $INPUT/test-R.pgn
+
+# -s
+#     + Input file containing games.
+#     - Input file(s): test-s.pgn
+#     - Resulting output should be silent, with games written to the output file.
+#     - Expected output: test-s-out.pgn
+../pgn-extract -s -o test-s-out.pgn $INPUT/test-s.pgn
+
+# -S
+#     + Input file containing games whose players' names have slight
+#       sound variations from anglesized versions.
+#     - Input file(s): test-S.pgn
+#     - Resulting output should be games that match by ignoring slight
+#       soundex differences.
+#     - Expected output: test-S-out.pgn
+../pgn-extract -S -TpPetrosian -otest-S-out.pgn $INPUT/test-S.pgn
+
+# -t
+#     + Input file containing games and a file of tag criteria.
+#     - Input file(s): test-t.pgn, taglist.txt
+#     - Resulting output should be only those games whose tags match
+#       all of the criteria.
+#     - Expected output: test-t-out.pgn
+../pgn-extract -t$INPUT/taglist.txt -otest-t-out.pgn $INPUT/test-t.pgn
+
+# -T
+#     + Input file containing games with tag information.
+#     - Input file(s): fischer.pgn, test-Ta.pgn (and eco.pgn for -Te test.)
+#     - Resulting output should contain only those games whose tag information
+#       matches that specified.
+#     - Expected output: test-Ta-out.pgn, test-Tb-out.pgn, test-Td-out.pgn,
+#                        test-Te-out.pgn, test-Tp-out.pgn, test-Tw-out.pgn
+../pgn-extract -Td1970 -otest-Td-out.pgn $INPUT/fischer.pgn
+../pgn-extract -TbPetrosian -otest-Tb-out.pgn $INPUT/fischer.pgn
+../pgn-extract -e -TeB14 -otest-Te-out.pgn $INPUT/fischer.pgn
+../pgn-extract -TpPetrosian -otest-Tp-out.pgn $INPUT/fischer.pgn
+../pgn-extract -Tr0-1 -otest-Tr-out.pgn $INPUT/fischer.pgn
+../pgn-extract -TwFischer -otest-Tw-out.pgn $INPUT/fischer.pgn
+../pgn-extract -TaBarnes -otest-Ta-out.pgn $INPUT/test-Ta.pgn
+
+# -U / --nounique
+#     + Input file containing games with duplicates and non-duplicates.
+#     - Input file(s): fischer.pgn, petrosian.pgn
+#     - Resulting output should be a file containing just the duplicate games.
+#     - Expected output: test-U-unique.pgn
+../pgn-extract -U -otest-U-unique.pgn $INPUT/fischer.pgn $INPUT/petrosian.pgn
+../pgn-extract --nounique -otest-U-unique.pgn $INPUT/fischer.pgn $INPUT/petrosian.pgn
+
+# -v
+#     + Input file containing games.
+#     - Input file(s): najdorf.pgn, vvars.txt
+#     - Resulting output should be only those games whose opening moves
+#       textually match (in any order) the moves in vars.txt.
+#     - Expected output: test-v-out.pgn
+../pgn-extract -v$INPUT/vvars.txt -otest-v-out.pgn $INPUT/najdorf.pgn
+
+# -V
+#     + Input file containing games with variations
+#     - Input file(s): test-V.pgn
+#     - Resulting output should have all variations removed.
+#     - Expected output: test-V-out.pgn
+../pgn-extract -V -otest-V-out.pgn $INPUT/test-V.pgn
+
+# -w / --linelength
+#     + Input file containing games.
+#     - Input file(s): test-w.pgn
+#     - Resulting output Games formatted up to the specified line length.
+#       The default is 75.
+#     - Expected output: test-w60-out.pgn, test-w75-out.pgn, test-w1000-out.pgn
+../pgn-extract -w60 -otest-w60-out.pgn $INPUT/test-w.pgn
+../pgn-extract -w75 -otest-w75-out.pgn $INPUT/test-w.pgn
+../pgn-extract -w1000 -otest-w1000-out.pgn $INPUT/test-w.pgn
+
+../pgn-extract --linelength 60 -otest-w60-out.pgn $INPUT/test-w.pgn
+../pgn-extract --linelength 75 -otest-w75-out.pgn $INPUT/test-w.pgn
+../pgn-extract --linelength 1000 -otest-w1000-out.pgn $INPUT/test-w.pgn
+
+# -W
+#     + Input file containing games.
+#     - Input file(s): test-W.pgn
+#     - Resulting output should be games formatted in the specified notation:
+#       halg (hyphenated long algebraic), lalg (non-hyphenated long algebraic),
+#       elalg (enhanced long algebraic), uci (UCI-compatible output),
+#	and alternative piece letters.
+#     - Expected output: test-Whalg-out.pgn, test-Wlalg-out.pgn,
+#                        test-elalg-out.pgn, test-Wdeutsch-out.pgn,
+#			 test-Wuci-out.pgn
+../pgn-extract -Whalg -otest-Whalg-out.pgn $INPUT/test-W.pgn
+../pgn-extract -Wlalg -otest-Wlalg-out.pgn $INPUT/test-W.pgn
+../pgn-extract -Welalg -otest-Welalg-out.pgn $INPUT/test-W.pgn
+../pgn-extract -WsanBSLTDK -otest-Wdeutsch-out.pgn $INPUT/test-W.pgn
+../pgn-extract -Wuci -otest-Wuci-out.pgn $INPUT/test-W.pgn
+
+# -x
+#     + Input file containing games.
+#     - Input file(s): najdorf.pgn, xvars.txt
+#     - Resulting output should be only those games which match
+#       the result of reaching the opening sequence in vars.txt.
+#     - Expected output: test-x-out.pgn
+../pgn-extract -x$INPUT/xvars.txt -otest-x-out.pgn $INPUT/najdorf.pgn
+
+# -Z
+#     + Input file containing games with duplicates and non-duplicates.
+#     - Input file(s): fischer.pgn, petrosian.pgn
+#     - Resulting output should be files separating the unique and
+#       duplicated games in the input files.
+#     - Expected output: test-Z-unique.pgn, test-Z-dupes.pgn
+../pgn-extract -Z -dtest-Z-dupes.pgn -otest-Z-unique.pgn $INPUT/fischer.pgn $INPUT/petrosian.pgn
+
+# -z
+#     + Input file containing games.
+#     - Input file(s): petrosian.pgn, zmatch.txt
+#     - Resulting output should be games whose material balance matches that
+#       specified in zmatch.txt
+#     - Expected output: test-z-out.pgn
+../pgn-extract -z$INPUT/zmatch.txt -otest-z-out.pgn $INPUT/petrosian.pgn
+
+# -#
+#     + Input file containing games.
+#     - Input file(s): test-hash.pgn
+#     - Resulting output The input file split in to separate sub-files,
+#       each containing 10 games, except the last which may contain fewer.
+#     - Expected output: 1.pgn, 2.pgn
+../pgn-extract -#20 $INPUT/test-hash.pgn
+
+# --evaluation
+#     + Input file containing games.
+#     - Input file(s): test-evaluation.pgn
+#     - Resulting output should include an evaluation value in a comment
+#       after every move.
+#     - Expected output: test-evaluation-out.pgn
+../pgn-extract --evaluation -otest-evaluation-out.pgn $INPUT/test-evaluation.pgn
+
+# --fencomments
+#     + Input file containing games.
+#     - Input file(s): test-fencomments.pgn
+#     - Resulting output should have a comment after every move containing a
+#       FEN description of the position after that move.
+#     - Expected output: test-fencomments-out.pgn
+../pgn-extract --fencomments -otest-fencomments-out.pgn $INPUT/test-fencomments.pgn
+
+# --markmatches
+#     + Input file containing games.
+#     - Input file(s): najdorf.pgn, xvars.txt
+#     - Resulting output should be only those games which match
+#       the result of reaching the opening sequence in vars.txt.
+#       The point of each match is marked with the comment { MATCH }
+#     - Expected output: test-markmatches-out.pgn
+../pgn-extract --markmatches MATCH -x$INPUT/xvars.txt -otest-markmatches-out.pgn $INPUT/najdorf.pgn
+
+# --nochecks
+#     + Input file containing games with moves involving moves that give check
+#       and/or mate.
+#     - Input file(s): test-nochecks.pgn
+#     - Resulting output should contain games with no check indicators after moves.
+#     - Expected output: test-nochecks-out.pgn
+../pgn-extract --nochecks -otest-nochecks-out.pgn $INPUT/test-nochecks.pgn
+
+# --nomovenumbers
+#     + Input file containing games with move numbers.
+#     - Input file(s): test-nomovenumbers.pgn
+#     - Resulting output should contain games with no move numbers.
+#     - Expected output: test-nomovenumbers-out.pgn
+../pgn-extract -otest-no-movenumbers-out.pgn --nomovenumbers $INPUT/test-nomovenumbers.pgn
+
+# --noresults
+#     + Input file containing games with results.
+#     - Input file(s): test-noresults.pgn
+#     - Resulting output should contain games with no results.
+#     - Expected output: test-noresults-out.pgn
+../pgn-extract -otest-no-results-out.pgn --noresults $INPUT/test-noresults.pgn
+
+# --notags
+#     + Input file containing games with tag information.
+#     - Input file(s): test-notags.pgn
+#     - Resulting output should contain games with no tag information.
+#     - Expected output: test-notags-out.pgn
+../pgn-extract -otest-no-tags-out.pgn --notags $INPUT/test-notags.pgn
+
+# --plylimit
+#     + Input file containing games.
+#     - Input file(s): test-plylimit.pgn
+#     - Resulting output should contain games whose number of moves (plies) are
+#       limited at the specified ply limit.
+#     - Expected output: test-plylimit-out.pgn
+../pgn-extract --plylimit 10 -otest-plylimit-out.pgn $INPUT/test-plylimit.pgn
+
+# --stalemate
+#     + Input file containing games.
+#     - Input file(s): test-stalemate.pgn
+#     - Resulting output should contain only those games that end in stalemate.
+#     - Expected output: test-stalemate-out.pgn
+../pgn-extract --stalemate -otest-stalemate-out.pgn $INPUT/test-stalemate.pgn
+
+# Test on a file with a string too long to be output within the
+# defined line length.
+#     + Input file containing a game with a very long comment.
+#     + Input file(s): test-long-line.pgn
+#     + Resulting output should contain the game properly formatted and
+#       the log file should contain an error message reporting the problem.
+#     + Expected output: test-long-line-out.pgn, test-long-line-log.txt
+../pgn-extract -otest-long-line-out.pgn -ltest-long-line-log.txt $INPUT/test-long-line.pgn
