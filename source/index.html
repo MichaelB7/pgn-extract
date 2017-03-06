@@ -1,0 +1,179 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>pgn-extract: Portable Game Notation (PGN) Manipulator for Chess Games</title>
+	<link rev="made" href="mailto:d.j.barnes @ kent.ac.uk">
+	<meta name="Author" content="David J. Barnes">
+	<meta name="Description"
+	      CONTENT="FTP Directory with source of program to manipulate
+	      chess games recorded in Portable Game Notation (PGN)
+	      format">
+	<meta name="Keywords" content="Chess PGN Portable Game Notation
+			Database
+			pgn-extract">
+        <link href="style.css" rel="stylesheet" type="text/css" media="all">
+</head>
+<body>
+<div id="body">
+
+  <div id="banner-wrapper">
+    <div id="banner">
+<h1 align="center">pgn-extract:<br />A Portable Game Notation (PGN) Manipulator for Chess Games<br />
+Version 17-34 by <a href="https://www.cs.kent.ac.uk/~djb/">David J. Barnes</a>
+(<a href="https://twitter.com/kentdjb">@kentdjb</a>)<br />
+<a href="pgn-extract.xml">
+<img alt="RSS feed image" src="feed.png" width="25" height="25"></a>
+</h1>
+    </div>
+  </div>
+
+  <div id="page-wrapper">
+    <div id="page">
+<h2>Introduction</h2>
+<p>This is the home page for
+the <em>pgn-extract</em> program,
+which is a <em>command-line</em> program for searching, manipulating and formatting
+chess games recorded in the Portable Game Notation (PGN) or something close. It
+is capable of handling files containing millions of games. It also recognises Chess960
+encodings.
+<p>A <a href="https://www.cs.kent.ac.uk/people/staff/djb/pgn-extract/help.html">full
+description of pgn-extract's functionality</a> is available and included
+with the sources.
+
+<p>Here you can find the C source code and win32 binary for the current
+version.
+pgn-extract compiles and runs under Windows, Linux and Mac OS X.
+This program is made available under the terms of the
+<a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/COPYING">GNU
+General Public License (Version 1).</a>
+
+<h2>Overview</h2>
+<p>The program is designed to make it easy to extract selected games from a
+PGN format data file based on a wide variety of criteria.
+The criteria include:
+<ul>
+<li><p>textual move sequences;</p></li>
+<li><p>the position reached after a sequence of moves;</p></li>
+<li><p>information in the tag fields;</p></li>
+<li><p>fuzzy board position;</p></li>
+<li><p>and material balance in the ending.</p></li>
+</ul>
+<p>Over the on-going 20-year course of its development, it has also added
+lots of features for controlling what is output (e.g., different
+algebraic formats, EPD, no move numbers, restricting game length, etc.)
+
+<p>The program includes a semantic analyser which will
+report errors in game scores and it is also able to detect duplicate
+games found in its input files.
+
+<p>The range of input move formats accepted is fairly wide and includes
+recognition of lower-case piece letters for English and upper-case
+piece letters for Dutch and German.  The output is normally in English Standard
+Algebraic Notation (SAN), but this can be varied.
+
+<p>Extracted games may be written out either including or excluding
+comments, NAGs, variations, move numbers, tags and/or results.
+Games may be given ECO classifications
+derived from the accompanying file eco.pgn, or a customised version
+provided by the user.
+
+<p>The program is designed to be relatively memory-friendly, so it
+does not retain a game's moves in memory once it has been processed.
+This also makes it suitable for bulk processing very large collections of games
+- it can efficiently process files containing several millions of games.
+
+<p>Use the <em>--help</em> argument to the program to
+get the full lists of arguments.
+
+<h2>New in version 17-34</h2>
+<p>These are the main changes in the latest version:
+<ul>
+    <li><p>Stop after matching a required number of games.</p></li>
+    <li><p>Only output games of a limited number of ply.</p></li>
+    <li><p>Filter out (or in) games with a SetUp tag.</p></li>
+    <li><p>Output a FEN comment at a specific position within a game.</p></li>
+</ul>
+
+<h2>Available Files</h2>
+<p>You can take a copy of the full source and
+documentation as either
+<a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/pgn-extract.tgz">pgn-extract.tgz</a> 
+or
+<a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/pgn-extract.zip">pgn-extract.zip</a>.
+Alternatively, <a
+href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/pgn-extract.exe">a win32
+binary</a> is available.
+</p>
+    <table>
+    <tr>
+    <td align="center"><b>Name</b></td>
+    <td align="center"><b>Description</b></td>
+    <td align="center"><b>Size</b></td>
+    <td align="center"><b>Date</b></td>
+    </tr>
+
+    <tr valign="top">
+    <td><a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/pgn-extract.tgz">pgn-extract.tgz</a><br>
+    <td>GZipped tar file
+    of the complete source of the latest version of the program.<br>
+    Includes <a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/help.html">usage documentation</a>,
+    Makefile for compilation and
+    <a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/eco.pgn">eco.pgn</a> file for ECO classification.</td>
+    <td align="right">340K bytes &nbsp;</td><td>Jan 27th 2017</td>
+    </tr>
+
+    <tr valign="top">
+    <td><a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/pgn-extract.zip">pgn-extract.zip</a></td>
+    <td>Zipped file of the complete source of the latest version of the program.<br>
+    Includes <a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/help.html">usage documentation</a>, Makefile for compilation and
+    <a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/eco.pgn">eco.pgn</a> file for ECO classification.</td>
+    <td align="right">480K bytes &nbsp;</td><td>Jan 27th 2017</td>
+    </tr>
+
+    <tr>
+    <td><a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/pgn-extract.exe">pgn-extract.exe</a></td>
+    <td>win32 binary of the latest version of the program.</td>
+    <td align="right">600K bytes &nbsp;</td><td>Jan 27th 2017</td>
+    </tr>
+
+    <tr>
+    <td><a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/eco.zip">eco.zip</a></td>
+    <td>Zipped version of <a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/eco.pgn">eco.pgn</a>.</td>
+    <td align="right">32K bytes &nbsp;</td><td>May 24 2013</td>
+    </tr>
+
+    <tr valign="top">
+    <td><a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/eco.pgn">eco.pgn</a></td>
+    <td>File of openings with PGN classification.<br>
+	This file is already included in the source archives.
+    </td>
+    <td align="right">254K bytes &nbsp;</td><td>May 24 2013</td>
+    </tr>
+
+    <tr>
+    <td><a href="ftp://ftp.cs.kent.ac.uk/pub/djb/pgn-extract/COPYING">COPYING</a></td>
+    <td>GNU General Public License (version 1).</td>
+    <td align="right">12K bytes &nbsp;</td><td>Dec 05  1997</td>
+    </tr>
+    </table>
+
+<h2>Feedback</h2>
+<p>Feedback and suggestions for further features are always welcome, although I can't always
+promise to undertake significant development work.
+<hr>
+    </div>
+  </div>
+
+  <div id="footer">
+<address>
+<p>&#169; 1994-2017 David J. Barnes<br />
+<a href="https://www.cs.kent.ac.uk/~djb/">My home page</a> at the University of Kent.<br />
+<a href="mailto:d.j.barnes @ kent.ac.uk">d.j.barnes @ kent.ac.uk</a><br />
+<a href="https://twitter.com/kentdjb">@kentdjb</a><br />
+Last updated: 27th January 2017: version 17-34 released.<br />
+</p>
+</address>
+  </div>
+</div>
+  </body>
+</html>
