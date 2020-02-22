@@ -12,4 +12,5 @@ PPPPP..P
 RNBQKBNR
 
 
+File infiles/test-r.txt: Line number: 1
 0 games matched out of 1.
