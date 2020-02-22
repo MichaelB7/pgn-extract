@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -48,7 +47,7 @@
 #define DEFAULT_POSITIONAL_DEPTH 300
 
 /* Prototypes of functions limited to this file. */
-static Boolean position_matches(const Board *board);
+static const char *position_matches(const Board *board);
 static Boolean play_moves(Game *game_details, Board *board, Move *moves,
         unsigned max_depth, Boolean check_move_validity,
         Boolean mainline);
@@ -56,12 +55,19 @@ static Boolean apply_variations(const Game *game_details, const Board *board,
         Variation *variation, Boolean check_move_validity);
 static Boolean rewrite_variations(const Board *board, Variation *variation);
 static Boolean rewrite_moves(Game *game, Board *board, Move *move_details);
+static void build_FEN_components(const Board *board, char *epd, char *fen_suffix);
+static unsigned plies_in_move_sequence(Move *moves);
+static Boolean drop_plies_from_start(Game *game, Move *moves, int plies_to_drop);
+#if 0
 static void append_evaluation(Move *move_details, const Board *board);
 static void append_FEN_comment(Move *move_details, const Board *board);
-static void append_hashcode_comment(Move *move_details, const Board *board);
+static void append_hashcode_comment(Move *move_details, Board *board);
+#endif
 static double evaluate(const Board *board);
 static double shannonEvaluation(const Board *board);
 static void print_board(const Board *board, FILE *outfp);
+static StringList * find_matching_comment(const char *comment_pattern,
+                                          const CommentList *comment);
 
 /* The English SAN piece characters. These are
  * always used when building a FEN string, rather
@@ -153,10 +159,15 @@ char *
 copy_string(const char *str)
 {
     char *result;
-    size_t len = strlen(str);
+    if(str != NULL) {
+        size_t len = strlen(str);
 
-    result = malloc_or_die(len + 1);
-    strcpy(result, str);
+        result = (char *) malloc_or_die(len + 1);
+        strcpy(result, str);
+    }
+    else {
+        result = NULL;
+    }
     return result;
 }
 
@@ -168,7 +179,7 @@ allocate_new_board(void)
 }
 
 /* Free the board space. */
-static void
+void
 free_board(Board *board)
 {
     (void) free((void *) board);
@@ -598,11 +609,12 @@ new_fen_board(const char *fen)
             fprintf(GlobalState.logfile, " Attempting to parse the game, anyway.");
         }
         else {
-            (void) free_board((void *) new_board);
+            free_board(new_board);
             new_board = NULL;
         }
         putc('\n', GlobalState.logfile);
         report_details(GlobalState.logfile);
+	print_error_context(GlobalState.logfile);
     }
     return new_board;
 }
@@ -614,10 +626,10 @@ new_fen_board(const char *fen)
  * If the fen argument is NULL then a completely new board is
  * setup, otherwise the indicated FEN position is returned.
  */
-static Board *
+Board *
 new_game_board(const char *fen)
 {
-    Board *new_board;
+    Board *new_board = NULL;
     static const Board initial_board ={
         {
             { OFF, OFF, OFF, OFF, OFF, OFF, OFF, OFF, OFF, OFF, OFF, OFF},
@@ -680,7 +692,7 @@ new_game_board(const char *fen)
             Colour colour = EXTRACT_COLOUR(coloured_piece);
 
             if (coloured_piece != EMPTY) {
-                new_board->hash_value ^= hash_lookup(col, rank, piece, colour);
+                new_board->weak_hash_value ^= hash_lookup(col, rank, piece, colour);
             }
         }
     }
@@ -800,23 +812,20 @@ half_moves_played(const Board *board)
  * move_details is completed by the call to determine_move_details.
  * Thereafter, it is safe to make the move on board.
  */
-static Boolean
-apply_move(Colour colour, Move *move_details, Board *board)
-{ /* Assume success. */
+Boolean
+apply_move(Move *move_details, Board *board)
+{   /* Assume success. */
     Boolean Ok = TRUE;
+    Colour colour = board->to_move;
 
     if (determine_move_details(colour, move_details, board)) {
         Piece piece_to_move = move_details->piece_to_move;
 
-        if (GlobalState.output_format == EPD) {
-            move_details->epd = (char *) malloc_or_die(FEN_SPACE);
-            build_basic_EPD_string(board, move_details->epd);
-        }
-
         if (move_details->class != NULL_MOVE) {
-            make_move(move_details->class, move_details->from_col, move_details->from_rank,
-                    move_details->to_col, move_details->to_rank,
-                    piece_to_move, colour, board);
+            make_move(move_details->class,
+                      move_details->from_col, move_details->from_rank,
+                      move_details->to_col, move_details->to_rank,
+                      piece_to_move, colour, board);
         }
         /* See if there are any subsidiary actions. */
         switch (move_details->class) {
@@ -863,6 +872,13 @@ apply_move(Colour colour, Move *move_details, Board *board)
             if (board->to_move == WHITE) {
                 board->move_number++;
             }
+            if (GlobalState.output_format == EPD || GlobalState.add_FEN_comments) {
+                char epd[FEN_SPACE], fen_suffix[FEN_SPACE];
+                build_FEN_components(board, epd, fen_suffix);
+                move_details->epd = copy_string(epd);
+                move_details->fen_suffix = copy_string(fen_suffix);
+            }
+
         }
     }
     else {
@@ -872,8 +888,7 @@ apply_move(Colour colour, Move *move_details, Board *board)
 }
 
 /* Play out the moves on the given board.
- * game_details is updated with the final_ and cumulative_ hash
- * values.
+ * game_details is updated with the final_ and cumulative_ hash values.
  * Check move validity unless a NULL_MOVE has been found in this
  * variation.
  * Return TRUE if the game is valid and matches all matching criteria,
@@ -892,20 +907,25 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
     Move *next_move = moves;
     /* Keep track of the final ECO match. */
     EcoLog *eco_match = NULL;
-    /* Whether a NULL_MOVE was found in the main line. */
     Boolean null_move_in_main_line = FALSE;
     /* Whether the fifty-move rule was available in the main line. */
     Boolean fifty_move_rule_applies = FALSE;
+    /* Number of ply, based on the current move number. */
+    unsigned plies = board->move_number * 2 - (board->to_move == WHITE ? 1 : 0);
+    /* Whether there has been an underpromotion. */
+    Boolean underpromotion = FALSE;
+    
+    const char *match_label = NULL;
     
     /* Try the initial board position for a match.
      * This is required because the game might have been set up
      * from a FEN string, rather than being the normal starting
      * position.
      */
-    if (!game_matches && position_matches(board)) {
+    if (!game_matches && (match_label = position_matches(board)) != NULL) {
         game_matches = TRUE;
         if (GlobalState.add_position_match_comments) {
-            CommentList *comment = create_match_comment(next_move);
+            CommentList *comment = create_match_comment(board);
             comment->next = game_details->prefix_comment;
             game_details->prefix_comment = comment;
         }
@@ -914,8 +934,9 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
      * moves and we haven't exceeded the search depth without finding
      * a match.
      */
-    while (game_ok && (next_move != NULL) &&
-            (game_matches || (board->move_number <= max_depth))) {
+    while (game_ok &&
+              (next_move != NULL) &&
+              (game_matches || (plies <= max_depth))) {
         if (*(next_move->move) != '\0') {
             /* See if there are any variations associated with this move. */
             if ((next_move->Variants != NULL) && GlobalState.keep_variations) {
@@ -934,33 +955,30 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
 #endif
             }
             if (check_move_validity) {
-                if (apply_move(board->to_move, next_move, board)) {
+                if (apply_move(next_move, board)) {
                     /* Don't try for a positional match if we already have one. */
-                    if (!game_matches && position_matches(board)) {
+                    if (!game_matches && (match_label = position_matches(board)) != NULL) {
                         game_matches = TRUE;
                         if (GlobalState.add_position_match_comments) {
-                            CommentList *comment = create_match_comment(next_move);
+                            CommentList *comment = create_match_comment(board);
                             append_comments_to_move(next_move, comment);
                         }
                     }
                     /* Combine this hash value with the cumulative one. */
-                    game_details->cumulative_hash_value += board->hash_value;
+                    game_details->cumulative_hash_value += board->weak_hash_value;
                     if (GlobalState.fuzzy_match_duplicates) {
-                        int plies = 2 * (board->move_number - 1);
-                        if (board->to_move == BLACK) {
-                            plies++;
-                        }
                         /* Consider remembering this hash value for fuzzy matches. */
                         if (GlobalState.fuzzy_match_depth == plies) {
                             /* Remember it. */
-                            game_details->fuzzy_duplicate_hash = board->hash_value;
+                            game_details->fuzzy_duplicate_hash = board->weak_hash_value;
                         }
                     }
 
                     if (GlobalState.check_for_repetition) {
-                        Boolean repetition = update_position_counts(game_details->position_counts, board->hash_value);
+                        Boolean repetition =
+                            update_position_counts(game_details->position_counts, board);
                         if (repetition && GlobalState.add_position_match_comments) {
-                            CommentList *comment = create_match_comment(next_move);
+                            CommentList *comment = create_match_comment(board);
                             append_comments_to_move(next_move, comment);
                         }
                     }
@@ -970,16 +988,24 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                             /* Fifty moves by both players with no pawn move or capture. */
                             fifty_move_rule_applies = TRUE;
                             if (GlobalState.add_position_match_comments) {
-                                CommentList *comment = create_match_comment(next_move);
+                                CommentList *comment = create_match_comment(board);
                                 append_comments_to_move(next_move, comment);
                             }
                         }
                     }
 
+                    if(GlobalState.match_underpromotion &&
+                       next_move->class == PAWN_MOVE_WITH_PROMOTION) {
+                         if(next_move->promoted_piece != QUEEN) {
+                             underpromotion = TRUE;
+                         }
+                    }
+
                     if (next_move->next == NULL && mainline) {
+                        /* End of the game. */
                         if (GlobalState.fuzzy_match_duplicates &&
                                 GlobalState.fuzzy_match_depth == 0) {
-                            game_details->fuzzy_duplicate_hash = board->hash_value;
+                            game_details->fuzzy_duplicate_hash = board->weak_hash_value;
                         }
                         /* Ensure that the result tag is consistent with the
                          * final status of the game.
@@ -990,21 +1016,29 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                             if (next_move->check_status == CHECKMATE) {
                                 if (board->to_move == BLACK) {
                                     if (strncmp(result, "1-0", 3) != 0) {
-                                        fprintf(GlobalState.logfile,
-                                                "Warning: Result of %s is inconsistent with checkmate by white in\n", result);
-                                        report_details(GlobalState.logfile);
                                         if (GlobalState.fix_result_tags) {
                                             corrected_result = "1-0";
+                                        }
+                                        else {
+                                            fprintf(GlobalState.logfile,
+                                                    "Warning: Result of %s is inconsistent with checkmate by white in\n",
+                                                    result);
+                                            report_details(GlobalState.logfile);
+                                            print_error_context(GlobalState.logfile);
                                         }
                                     }
                                 }
                                 else {
                                     if (strncmp(result, "0-1", 3) != 0) {
-                                        fprintf(GlobalState.logfile,
-                                                "Warning: Result of %s is inconsistent with checkmate by black in\n", result);
-                                        report_details(GlobalState.logfile);
                                         if (GlobalState.fix_result_tags) {
                                             corrected_result = "0-1";
+                                        }
+                                        else {
+                                            fprintf(GlobalState.logfile,
+                                                    "Warning: Result of %s is inconsistent with checkmate by black in\n",
+                                                    result);
+                                            report_details(GlobalState.logfile);
+                                            print_error_context(GlobalState.logfile);
                                         }
                                     }
                                 }
@@ -1012,11 +1046,15 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                             else {
                                 if (is_stalemate(board, NULL)) {
                                     if (strncmp(result, "1/2", 3) != 0) {
-                                        fprintf(GlobalState.logfile,
-                                                "Warning: Result of %s is inconsistent with stalemate in\n", result);
-                                        report_details(GlobalState.logfile);
                                         if (GlobalState.fix_result_tags) {
                                             corrected_result = "1/2-1/2";
+                                        }
+                                        else {
+                                            fprintf(GlobalState.logfile,
+                                                    "Warning: Result of %s is inconsistent with stalemate in\n",
+                                                    result);
+                                            report_details(GlobalState.logfile);
+                                            print_error_context(GlobalState.logfile);
                                         }
                                     }
                                 }
@@ -1024,6 +1062,48 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                             if (corrected_result != NULL) {
                                 free((void *) result);
                                 game_details->tags[RESULT_TAG] = copy_string(corrected_result);
+                                if(next_move->terminating_result != NULL) {
+                                    free((void *) next_move->terminating_result);
+                                    next_move->terminating_result = NULL;
+                                }
+                                next_move->terminating_result = copy_string(corrected_result);
+                            }
+                        }
+
+
+                        /* Check for inconsistency between Result tag and game result. */
+                        const char *move_result = next_move->terminating_result;
+                        const char *result_tag = game_details->tags[RESULT_TAG];
+                        if (result_tag != NULL && move_result != NULL &&
+                                strcmp(result_tag, move_result) != 0) {
+                            /* Mismatch. */
+                            /* Whether to report it. */
+                            Boolean report = TRUE;
+                            if (GlobalState.fix_result_tags) {
+                                if(strcmp(move_result, "*") == 0 || 
+                                        strcmp(result_tag, "*") == 0) {
+                                    /* Prefer the move result. */
+                                    free((void *) result_tag);
+                                    game_details->tags[RESULT_TAG] = copy_string(move_result);
+                                    report = FALSE;
+                                }
+                                else {
+                                    /* Irreconcilable conflict. */
+                                }
+                            }
+                            else if(strcmp(move_result, "*") == 0) {
+                                /* Don't report this form of inconsistency. */
+                                report = FALSE;
+                            }
+                            if(report) {
+                                print_error_context(GlobalState.logfile);
+                                fprintf(GlobalState.logfile,
+                                        "Inconsistent result strings %s vs %s in the following game.\n",
+                                        result_tag, move_result);
+                                report_details(GlobalState.logfile);
+                                if (GlobalState.reject_inconsistent_results) {
+                                    game_ok = FALSE;
+                                }
                             }
                         }
                     }
@@ -1031,7 +1111,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                     if (GlobalState.add_ECO && !GlobalState.parsing_ECO_file) {
                         int half_moves = half_moves_played(board);
                         EcoLog *entry = eco_matches(
-                                board->hash_value,
+                                board->weak_hash_value,
                                 game_details->cumulative_hash_value,
                                 half_moves);
                         if (entry != NULL) {
@@ -1071,6 +1151,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                             next_move->move);
                     print_board(board, GlobalState.logfile);
                     report_details(GlobalState.logfile);
+		    print_error_context(GlobalState.logfile);
                     game_ok = FALSE;
                     /* Work out where the error was. */
                     error_ply = 2 * board->move_number - 1;
@@ -1102,12 +1183,16 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                 error_ply++;
             }
         }
+        plies++;
     }
     /* Record whether the full game was checked or not. */
     game_details->moves_checked = next_move == NULL;
 
     if (null_move_in_main_line) {
-        game_ok = FALSE;
+        /* From v17.50: Don't automatically rule this game out. */
+        if(!GlobalState.allow_null_moves) {
+            game_ok = FALSE;
+        }
     }
     if (game_ok) {
         if (eco_match != NULL) {
@@ -1128,6 +1213,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                 (void) free((void *) game_details->tags[SUB_VARIATION_TAG]);
                 game_details->tags[SUB_VARIATION_TAG] = NULL;
             }
+
             /* Add in the new one. */
             if (eco_match->ECO_tag != NULL) {
                 game_details->tags[ECO_TAG] = copy_string(eco_match->ECO_tag);
@@ -1145,20 +1231,43 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
             }
         }
 
-        if (GlobalState.check_for_fifty_move_rule && mainline) {
+        if(GlobalState.check_for_fifty_move_rule && mainline) {
             game_matches = fifty_move_rule_applies;
+        }
+        if(GlobalState.match_underpromotion && !underpromotion) {
+            game_matches = FALSE;
+        }
+        
+        /* Add a tag containing the matching FENPattern  label
+         * if appropriate.
+         */
+        if(GlobalState.add_matchlabel_tag && match_label != NULL && *match_label != '\0') {
+            game_details->tags[MATCHLABEL_TAG] = copy_string(match_label);            
         }
     }
     /* Fill in the hash value of the final position reached. */
-    game_details->final_hash_value = board->hash_value;
+    game_details->final_hash_value = board->weak_hash_value;
     game_details->moves_ok = game_ok;
     game_details->error_ply = error_ply;
     if (!game_ok) {
         /* Decide whether to keep it anyway. */
         if (GlobalState.keep_broken_games) {
         }
+#if 0
         else if (GlobalState.positional_variations) {
+            /* NB: Not rejecting the match when a game is not ok led to
+             * a memory bug in v18-10. This is now fixed so this code
+             * could be retained. However, ...
+             * I think I felt it appropriate to retain broken games
+             * when positional variations are being sought so that games
+             * to be truncated before the end would still be matched, but it
+             * has the consequences errors are reported twice and broken
+             * games may be counted as matches.
+             * For the time being, I am closing this route but it might
+             * be appropriate to re-open it at some point.
+             */
         }
+#endif
         else {
             /* Only return a match if it genuinely matched a variation
              * in which we were interested.
@@ -1190,9 +1299,9 @@ play_eco_moves(Game *game_details, Board *board, Move *moves)
     while (game_ok && (next_move != NULL)) {
         if (*(next_move->move) != '\0') {
             /* Ignore variations. */
-            if (apply_move(board->to_move, next_move, board)) {
+            if (apply_move(next_move, board)) {
                 /* Combine this hash value to the cumulative one. */
-                game_details->cumulative_hash_value += board->hash_value;
+                game_details->cumulative_hash_value += board->weak_hash_value;
                 next_move = next_move->next;
             }
             else {
@@ -1204,6 +1313,7 @@ play_eco_moves(Game *game_details, Board *board, Move *moves)
                         next_move->move);
                 print_board(board, GlobalState.logfile);
                 report_details(GlobalState.logfile);
+		print_error_context(GlobalState.logfile);
                 game_ok = FALSE;
                 /* Work out where the error was. */
                 error_ply = 2 * board->move_number - 1;
@@ -1230,7 +1340,7 @@ play_eco_moves(Game *game_details, Board *board, Move *moves)
     /* Record whether the full game was checked or not. */
     game_details->moves_checked = next_move == NULL;
     /* Fill in the hash value of the final position reached. */
-    game_details->final_hash_value = board->hash_value;
+    game_details->final_hash_value = board->weak_hash_value;
     game_details->moves_ok = game_ok;
     game_details->error_ply = error_ply;
 }
@@ -1272,7 +1382,7 @@ apply_variations(const Game *game_details, const Board *board, Variation *variat
         variation = variation->next;
     }
     (void) free((void *) copy_game);
-    (void) free_board((void *) copy_board);
+    free_board(copy_board);
     return variation_matches;
 }
 
@@ -1299,7 +1409,7 @@ apply_move_list(Game *game_details, unsigned *plycount, unsigned max_depth)
     game_details->cumulative_hash_value = 0;
 
     if (GlobalState.check_for_repetition && game_details->position_counts == NULL) {
-        game_details->position_counts = new_position_count_list(board->hash_value);
+        game_details->position_counts = new_position_count_list(board);
     }
 
     /* Play through the moves and see if we have a match.
@@ -1320,7 +1430,7 @@ apply_move_list(Game *game_details, unsigned *plycount, unsigned max_depth)
         game_matches = check_for_only_stalemate(board, moves);
     }
 
-    (void) free_board((void *) board);
+    free_board(board);
     return game_matches;
 }
 
@@ -1338,10 +1448,12 @@ apply_eco_move_list(Game *game_details, unsigned *number_of_half_moves)
     /* Start off the cumulative hash value. */
     game_details->cumulative_hash_value = 0;
     play_eco_moves(game_details, board, moves);
-    //game_details->moves_checked = TRUE;
+#if 0
+    game_details->moves_checked = TRUE;
+#endif
     /* Record how long the game was. */
     *number_of_half_moves = half_moves_played(board);
-    (void) free_board((void *) board);
+    free_board(board);
     return game_details->moves_ok;
 }
 
@@ -1578,21 +1690,44 @@ rewrite_SAN_string(Colour colour, Move *move_details, Board *board)
  * Return TRUE if the move is ok, FALSE otherwise.
  */
 static Boolean
-rewrite_move(Colour colour, Move *move_details, Board *board)
+rewrite_move(Game *game, Colour colour, Move *move_details, Board *board)
 { /* Assume success. */
     Boolean Ok = TRUE;
     
-    if (GlobalState.output_format == SOURCE || 
+    if(move_details->class == UNKNOWN_MOVE) {
+        Ok = FALSE;
+    }
+    else if (GlobalState.output_format == SOURCE || 
             rewrite_SAN_string(colour, move_details, board)) {
         Piece piece_to_move = move_details->piece_to_move;
+        MoveClass class = move_details->class;
+        Col castling_rook_col = '\0';
 
-        if (move_details->class != NULL_MOVE) {
-            make_move(move_details->class, move_details->from_col, move_details->from_rank,
+        /* Try to accommodate Chess960 castling format where the King
+         * is moved to the position of the Rook.
+         * NB: The contents of the Variant tag vary a lot for
+         *     chess 960 games..
+         */
+        if ((class == KINGSIDE_CASTLE || class == QUEENSIDE_CASTLE) &&
+                game != NULL &&
+                game->tags[VARIANT_TAG] != NULL &&
+                strstr(game->tags[VARIANT_TAG], "960") != NULL) {
+            /* Remember where the Rook was before the move is applied. */
+            castling_rook_col = find_castling_rook_col(colour, board, class);
+        }
+        if (class != NULL_MOVE) {
+            make_move(class, move_details->from_col, move_details->from_rank,
                     move_details->to_col, move_details->to_rank,
                     piece_to_move, colour, board);
+            if(castling_rook_col != '\0') {
+                /* Rewrite the King's target column to be the original
+                 * position of the Rook to accommodate Chess960 format.
+                 */
+                move_details->to_col = castling_rook_col;
+            }
         }
         /* See if there are any subsidiary actions. */
-        switch (move_details->class) {
+        switch (class) {
             case PAWN_MOVE:
             case PIECE_MOVE:
             case ENPASSANT_PAWN_MOVE:
@@ -1601,17 +1736,16 @@ rewrite_move(Colour colour, Move *move_details, Board *board)
                 /* Nothing more to do. */
                 break;
             case PAWN_MOVE_WITH_PROMOTION:
-                if (move_details->class == PAWN_MOVE_WITH_PROMOTION) {
-                    if (move_details->promoted_piece != EMPTY) {
-                        /* @@@ Do promoted moves have '+' properly appended? */
-                        /* Now make the promotion. */
-                        make_move(move_details->class, move_details->to_col, move_details->to_rank,
-                                move_details->to_col, move_details->to_rank,
-                                move_details->promoted_piece, colour, board);
-                    }
-                    else {
-                        Ok = FALSE;
-                    }
+                if (move_details->promoted_piece != EMPTY) {
+                    /* @@@ Do promoted moves have '+' properly appended? */
+                    /* Now make the promotion. */
+                    make_move(class,
+                              move_details->to_col, move_details->to_rank,
+                              move_details->to_col, move_details->to_rank,
+                              move_details->promoted_piece, colour, board);
+                }
+                else {
+                    Ok = FALSE;
                 }
                 break;
             case NULL_MOVE:
@@ -1638,6 +1772,7 @@ rewrite_moves(Game *game, Board *board, Move *moves)
 {
     Boolean game_ok = TRUE;
     Move *move_details = moves;
+    int plies_to_drop = GlobalState.drop_ply_number;
 
     while (game_ok && (move_details != NULL)) {
         if (*(move_details->move) != '\0') {
@@ -1648,60 +1783,47 @@ rewrite_moves(Game *game, Board *board, Move *moves)
                 /* Something wrong with the variations. */
                 game_ok = FALSE;
             }
-            /* NULL_MOVE not allowed in the main line. */
-            if (rewrite_move(board->to_move, move_details, board) &&
-                    !(move_details->class == NULL_MOVE && game != NULL)) {
+            if (rewrite_move(game, board->to_move, move_details, board)) {
+                if(move_details->class == NULL_MOVE && game != NULL) {
+                    /* NULL_MOVE not allowed in the main line. */
+                }
                 board->to_move = OPPOSITE_COLOUR(board->to_move);
                 if (board->to_move == WHITE) {
                     board->move_number++;
                 }
 
                 if (GlobalState.output_evaluation) {
-                    /* Append an evaluation of the new state of the board
-                     * with the move having been played.
-                     */
-                    append_evaluation(move_details, board);
+                    move_details->evaluation = evaluate(board);
                 }
 
-                if (GlobalState.add_FEN_comments) {
-                    /* Append a FEN comment with the new state of the board
-                     * with the move having been played.
-                     */
-                    append_FEN_comment(move_details, board);
-                }
-                
                 if (GlobalState.add_hashcode_comments) {
                     /* Append a hashcode comment using the new state of the board
                      * with the move having been played.
                      */
-                    append_hashcode_comment(move_details, board);
+                    move_details->zobrist = generate_zobrist_hash_from_board(board);
                 }
                 
+                if(GlobalState.drop_comment_pattern != NULL &&
+                        move_details->comment_list != NULL) {
+                    if(find_matching_comment(GlobalState.drop_comment_pattern,
+                                              move_details->comment_list) != NULL) {
+                        /* We have a match. */
+                        plies_to_drop = (board->move_number - 1) * 2;
+                        if(board->to_move == BLACK) {
+                            plies_to_drop++;
+                        }
+                    }
+                }
                 /* See if a comment should be replaced by a FEN comment. */
-                if(move_details->comment_list != NULL &&
-                        GlobalState.FEN_comment_pattern != NULL) {
-                    CommentList *comment = move_details->comment_list;
-                    Boolean match = FALSE;
-                    while(!match && comment != NULL) {
-                        StringList *string_list = comment->comment;
-                        while(!match && string_list != NULL) {
-                            if(strcmp(GlobalState.FEN_comment_pattern, string_list->str) == 0) {
-                                match = TRUE;
-                            }
-                            else {
-                                string_list = string_list->next;
-                            }
-                        }
-                        if(!match) {
-                            comment = comment->next;
-                        }
-                        else {
-                            /* Crudely replace it. */
-                            (void) free((void *) string_list->str);
-                            char *FEN_comment = malloc_or_die(FEN_SPACE);
-                            build_FEN_string(board, FEN_comment);
-                            string_list->str = FEN_comment;
-                        }
+                if(GlobalState.FEN_comment_pattern != NULL &&
+                        move_details->comment_list != NULL) {
+                    StringList *comment_to_replace =
+                        find_matching_comment(GlobalState.FEN_comment_pattern,
+                                              move_details->comment_list);
+                    if(comment_to_replace != NULL) {
+                        /* Replace it. */
+                        (void) free((void *) comment_to_replace->str);
+                        comment_to_replace->str = get_FEN_string(board);
                     }
                 }
 
@@ -1718,6 +1840,7 @@ rewrite_moves(Game *game, Board *board, Move *moves)
                             (board->to_move == WHITE) ? "." : "...",
                             move_details->move);
                     report_details(GlobalState.logfile);
+		    print_error_context(GlobalState.logfile);
                     print_board(board, GlobalState.logfile);
                 }
                 game_ok = FALSE;
@@ -1731,54 +1854,68 @@ rewrite_moves(Game *game, Board *board, Move *moves)
             game_ok = FALSE;
         }
     }
-    if (!game_ok && GlobalState.keep_broken_games && move_details != NULL) {
-        /* Try to place the remaining moves into a comment. */
-        CommentList *comment = (CommentList*) malloc_or_die(sizeof (*comment));
-        /* Break the link from the previous move. */
-        Move *prev;
-        StringList *commented_move_list = NULL;
+    if (!game_ok) {
+        if(GlobalState.keep_broken_games && move_details != NULL) {
+            /* Try to place the remaining moves into a comment. */
+            CommentList *comment = (CommentList*) malloc_or_die(sizeof (*comment));
+            /* Break the link from the previous move. */
+            Move *prev;
+            StringList *commented_move_list = NULL;
 
-        /* Find the move before the current one, if any. */
-        if (move_details == moves) {
-            /* Broken from the first move. */
-            prev = NULL;
-        }
-        else {
-            prev = moves;
-            while (prev != NULL && prev->next != move_details) {
-                prev = prev->next;
+            /* Find the move before the current one, if any. */
+            if (move_details == moves) {
+                /* Broken from the first move. */
+                prev = NULL;
             }
-            if (prev != NULL) {
-                prev->next = NULL;
-            }
-        }
-        /* Build the comment string. */
-        char *terminating_result = NULL;
-        while (move_details != NULL) {
-            commented_move_list = save_string_list_item(commented_move_list, (char *) move_details->move);
-            if (move_details->next == NULL) {
-                /* Remove the terminating result. */
-                terminating_result = move_details->terminating_result;
-                move_details->terminating_result = NULL;
-            }
-            move_details = move_details->next;
-        }
-        comment->comment = commented_move_list;
-        comment->next = NULL;
-
-        if (prev != NULL) {
-            prev->terminating_result = terminating_result;
-            append_comments_to_move(prev, comment);
-        }
-        else {
-            /* The whole game is broken. */
-            if (game != NULL) {
-                if (terminating_result != NULL) {
-                    commented_move_list = save_string_list_item(commented_move_list, terminating_result);
+            else {
+                prev = moves;
+                while (prev != NULL && prev->next != move_details) {
+                    prev = prev->next;
                 }
-                game->prefix_comment = comment;
-                game->moves = NULL;
+                if (prev != NULL) {
+                    prev->next = NULL;
+                }
             }
+            /* Build the comment string. */
+            char *terminating_result = NULL;
+            while (move_details != NULL) {
+                commented_move_list = save_string_list_item(commented_move_list, (char *) move_details->move);
+                if (move_details->next == NULL) {
+                    /* Remove the terminating result. */
+                    terminating_result = move_details->terminating_result;
+                    move_details->terminating_result = NULL;
+                }
+                move_details = move_details->next;
+            }
+            comment->comment = commented_move_list;
+            comment->next = NULL;
+
+            if (prev != NULL) {
+                prev->terminating_result = terminating_result;
+                append_comments_to_move(prev, comment);
+            }
+            else {
+                /* The whole game is broken. */
+                if (game != NULL) {
+                    if (terminating_result != NULL) {
+                        commented_move_list = save_string_list_item(commented_move_list, terminating_result);
+                    }
+                    game->prefix_comment = comment;
+                    game->moves = NULL;
+                }
+            }
+        }
+    }
+    else if(plies_to_drop != 0 && game != NULL) {
+        if(plies_to_drop < 0) {
+            unsigned plies = plies_in_move_sequence(moves);
+            plies_to_drop = plies + plies_to_drop;
+        }
+        if(plies_to_drop >= 0) {
+            game_ok = drop_plies_from_start(game, moves, plies_to_drop);
+        }
+        else {
+            game_ok = FALSE;
         }
     }
     return game_ok;
@@ -1800,7 +1937,7 @@ rewrite_variations(const Board *board, Variation *variation)
         variations_ok = rewrite_moves((Game *) NULL, copy_board, variation->moves);
         variation = variation->next;
     }
-    (void) free_board((void *) copy_board);
+    free_board(copy_board);
     return variations_ok;
 }
 
@@ -1812,8 +1949,7 @@ rewrite_variations(const Board *board, Variation *variation)
 Board *
 rewrite_game(Game *current_game)
 {
-    const char *fen = current_game->tags[FEN_TAG];
-    Board *board = new_game_board(fen);
+    Board *board = new_game_board(current_game->tags[FEN_TAG]);
     Boolean game_ok;
 
     /* No null-move found at the start of the game. */
@@ -1823,12 +1959,99 @@ rewrite_game(Game *current_game)
     else if (GlobalState.keep_broken_games) {
     }
     else {
-        (void) free_board((void *) board);
+        free_board(board);
         board = NULL;
     }
     return board;
 }
 
+/* Return the number of plies in the given move
+ * sequence.
+ */
+static unsigned plies_in_move_sequence(Move *moves)
+{
+    int num_plies = 0;
+    while(moves != NULL) {
+        moves = moves->next;
+        num_plies++;
+    }
+    return num_plies;
+}
+
+/* Drop the given number of play from the start of this game.
+ * If plies_to_drop is negative, drop all but that number
+ * from the beginning.
+ * Return FALSE if there are insufficient.
+ * If there are sufficient replace the game's FEN tag with
+ * the revised starting state.
+ */
+static Boolean
+drop_plies_from_start(Game *game, Move *moves, int plies_to_drop)
+{
+    char *fen = game->tags[FEN_TAG];
+    Board *board = new_game_board(fen);
+    Boolean game_ok = TRUE;
+    int plies = 0;
+    Move *new_head = moves;
+
+    if(plies_to_drop > 0 && game->prefix_comment != NULL) {
+        /* Don't free the prefix_comment because that is
+         * handled elsewhere.
+         */
+        game->prefix_comment = NULL;
+    }
+    while(plies < plies_to_drop && new_head != NULL && game_ok) {
+        /* Rewriting is not strictly necessary, because it has already been done,
+         * but it provides all the required functionality.
+         */
+        if (rewrite_move(game, board->to_move, new_head, board)) {
+            board->to_move = OPPOSITE_COLOUR(board->to_move);
+            if (board->to_move == WHITE) {
+                board->move_number++;
+            }
+            plies++;
+            new_head = new_head->next;
+        }
+        else {
+            game_ok = FALSE;
+        }
+    }
+    if(plies == plies_to_drop && game_ok) {
+        if(fen != NULL) {
+            (void) free((void *) fen);
+        }
+#if 0
+        /* Reset the move number. */
+        board->move_number = 1;
+#endif
+        game->moves = new_head;        
+        game->tags[FEN_TAG] = get_FEN_string(board);
+        game->tags[SETUP_TAG] = copy_string("1");
+        if(game->tags[PLY_COUNT_TAG] != NULL || GlobalState.output_plycount) {
+            add_plycount(game);
+        }
+
+        if(game->tags[TOTAL_PLY_COUNT_TAG] != NULL || GlobalState.output_total_plycount) {
+            add_total_plycount(game, GlobalState.keep_variations);
+        }
+
+        /* Make sure we aren't dropping 0 moves. */
+        if(new_head != moves) {
+            /* Free the dropped moves. */
+            Move *move_to_drop = moves;
+            while(move_to_drop->next != new_head) {
+                move_to_drop = move_to_drop->next;
+            }
+            move_to_drop->next = NULL;
+            free_move_list(moves);
+        }
+    }
+    else {
+        game_ok = FALSE;
+    }
+    (void) free((void *) board);
+    return game_ok;
+}
 
 /* Define a table to hold the positional hash codes of interest.
  * Size should be a prime number for collision avoidance.
@@ -1857,7 +2080,7 @@ store_hash_value(Move *move_details, const char *fen)
             /* A comment node, not a proper move. */
             move = move->next;
         }
-        else if (apply_move(board->to_move, move, board)) {
+        else if (apply_move(move, board)) {
             move = move->next;
         }
         else {
@@ -1872,13 +2095,13 @@ store_hash_value(Move *move_details, const char *fen)
 
     if (Ok) {
         HashLog *entry = (HashLog *) malloc_or_die(sizeof (*entry));
-        unsigned ix = board->hash_value % MAX_NON_POLYGLOT_CODE;
+        unsigned ix = board->weak_hash_value % MAX_NON_POLYGLOT_CODE;
 
         /* We don't include the cumulative hash value as the sequence
          * of moves to reach this position is not important.
          */
         entry->cumulative_hash_value = 0;
-        entry->final_hash_value = board->hash_value;
+        entry->final_hash_value = board->weak_hash_value;
         /* Link it into the head at this index. */
         entry->next = non_polyglot_codes_of_interest[ix];
         non_polyglot_codes_of_interest[ix] = entry;
@@ -1887,7 +2110,7 @@ store_hash_value(Move *move_details, const char *fen)
     else {
         exit(1);
     }
-    (void) free_board((void *) board);
+    free_board(board);
 }
 
 /* Define a table to hold the positional hash codes of interest.
@@ -1906,12 +2129,36 @@ Boolean using_polyglot = FALSE;
  */
 Boolean save_polyglot_hashcode(const char *value)
 {
-    uint64_t hash;
+    uint64_t hash = 0x0;
     Boolean Ok;
     
     if(value != NULL && *value != '\0') {
-        if(value[strspn(value, "0123456789abcdefABCDEF")] == '\0') {
-            Ok = sscanf(value, "%llx", &hash) == 1;
+        size_t len = strspn(value, "0123456789abcdefABCDEF");
+        if(len > 0 && value[len] == '\0') {
+            /* Avoid using %llx to convert the string as it is
+             * not converted correctly on 32-bit systems.
+             */
+            if(len <= 8) {
+                unsigned long lower;
+                Ok = sscanf(value, "%lx", &lower) == 1;
+                if(Ok) {
+                    hash = lower;
+                }
+            }
+            else {
+                char *copy = copy_string(value);
+                /* Exclude the bottom 8 characters. */
+                copy[8] = '\0';
+                /* Extract the upper 4 bytes. */
+                unsigned long upper;
+                Ok = sscanf(copy, "%lx", &upper) == 1;
+                /* Extract the lower 4 bytes. */
+                unsigned long lower;
+                Ok &= sscanf(value + 16 - len, "%lx", &lower) == 1;
+                hash = upper;
+                hash <<= 32;
+                hash |= lower;
+            }
             if (Ok) {
                 HashLog *entry = (HashLog *) malloc_or_die(sizeof (*entry));
                 unsigned ix = hash % MAX_POLYGLOT_CODE;
@@ -1926,6 +2173,9 @@ Boolean save_polyglot_hashcode(const char *value)
                 polyglot_codes_of_interest[ix] = entry;
                 using_polyglot = TRUE;
             }
+            else {
+                fprintf(GlobalState.logfile, "Unrecognised hash value %s\n", value);
+            }
         }
         else {
             Ok = FALSE;
@@ -1939,14 +2189,17 @@ Boolean save_polyglot_hashcode(const char *value)
 
 /* Does the current board match a position of interest.
  * Look in codes_of_interest for current_hash_value.
+ * Return NULL if no match, otherwise a possible label for the
+ * match to be added to the game's tags. An empty string is
+ * used for no label.
  */
-static Boolean
+static const char *
 position_matches(const Board *board)
 {
     Boolean found = FALSE;
     
     if(using_non_polyglot) {
-        HashCode current_hash_value = board->hash_value;
+        HashCode current_hash_value = board->weak_hash_value;
         unsigned ix = current_hash_value % MAX_NON_POLYGLOT_CODE;
         for (HashLog *entry = non_polyglot_codes_of_interest[ix]; !found && (entry != NULL);
                 entry = entry->next) {
@@ -1967,11 +2220,13 @@ position_matches(const Board *board)
             }
         }
     }
-    if (!found) {
-        const char *matching_pattern = pattern_match_board(board);
-        found = matching_pattern != NULL;
+    if (found) {
+        return "";
     }
-    return found;
+    else {
+        const char *match_label = pattern_match_board(board);
+        return match_label;
+    }
 }
 
 /* Build a basic EPD string from the given board. */
@@ -2224,28 +2479,39 @@ build_basic_EPD_string(const Board *board, char *epd)
     epd[ix] = '\0';
 }
 
-/* Build a FEN string from the given board. */
-void
-build_FEN_string(const Board *board, char *fen)
+/* Build and return a FEN string for the given board. */
+char *get_FEN_string(const Board *board)
 {
-    size_t ix;
+    char epd[FEN_SPACE], fen_suffix[FEN_SPACE];
+    build_FEN_components(board, epd, fen_suffix);
+    char *FEN_string = (char *) malloc_or_die(strlen(epd) + 1 + 
+            strlen(fen_suffix) + 1);
+    sprintf(FEN_string, "%s %s", epd, fen_suffix);
+    return FEN_string;
+}
 
-    build_basic_EPD_string(board, fen);
-    /* Append the (pseudo) half move count and the full move count. */
-    ix = strlen(fen);
-    fen[ix] = ' ';
-    ix++;
+/* Build a FEN string from the given board.
+ * Place the EPD portion in epd and the half-move
+ * count and following in fen_suffix.
+ */
+static void
+build_FEN_components(const Board *board, char *epd, char *fen_suffix)
+{
 
+    build_basic_EPD_string(board, epd);
+    /* Format the (pseudo) half move count and the full move count. */
+    size_t ix = 0;
     /* Half moves since the last capture or pawn move. */
-    sprintf(&fen[ix], "%u", board->halfmove_clock);
-    ix = strlen(fen);
-    fen[ix] = ' ';
+    sprintf(fen_suffix, "%u", board->halfmove_clock);
+    ix = strlen(fen_suffix);
+    fen_suffix[ix] = ' ';
     ix++;
 
     /* The full move number. */
-    sprintf(&fen[ix], "%u", board->move_number);
+    sprintf(&fen_suffix[ix], "%u", board->move_number);
 }
 
+#if 0
 /* Append to move_details a FEN comment of the board.
  * The board state is immediately following application of the
  * given move.
@@ -2253,11 +2519,9 @@ build_FEN_string(const Board *board, char *fen)
 static void
 append_FEN_comment(Move *move_details, const Board *board)
 {
-    char *FEN_comment = malloc_or_die(FEN_SPACE);
     CommentList *comment = (CommentList*) malloc_or_die(sizeof (*comment));
-    StringList *current_comment = save_string_list_item(NULL, FEN_comment);
+    StringList *current_comment = save_string_list_item(NULL, get_FEN_string(board));
 
-    build_FEN_string(board, FEN_comment);
     comment->comment = current_comment;
     comment->next = NULL;
     append_comments_to_move(move_details, comment);
@@ -2274,13 +2538,13 @@ append_FEN_comment(Move *move_details, const Board *board)
  * given move.
  */
 static void
-append_hashcode_comment(Move *move_details, const Board *board)
+append_hashcode_comment(Move *move_details, Board *board)
 {
-    char *hashcode_comment = malloc_or_die(HASH_64_BIT_SPACE + 1);
+    uint64_t hash = generate_zobrist_hash_from_board(board);
+    char *hashcode_comment = (char *) malloc_or_die(HASH_64_BIT_SPACE + 1);
     CommentList *comment = (CommentList*) malloc_or_die(sizeof (*comment));
     StringList *current_comment = save_string_list_item(NULL, hashcode_comment);
     
-    uint64_t hash = generate_zobrist_hash_from_board(board);
     sprintf(hashcode_comment, "%llx", hash);
 
     comment->comment = current_comment;
@@ -2319,15 +2583,21 @@ append_evaluation(Move *move_details, const Board *board)
     comment->next = NULL;
     append_comments_to_move(move_details, comment);
 }
+#endif
 
-/* Append to move_details a comment indicating that this
- * move resulted in a positional match.
- */
+/* Create a comment indicating in a positional match. */
 CommentList *
-create_match_comment(Move *move_details)
+create_match_comment(const Board *board)
 {
     /* The comment string. */
-    char *match_comment = copy_string(GlobalState.position_match_comment);
+    char *match_comment;
+    
+    if(strcmp(GlobalState.position_match_comment, "FEN") != 0) {
+        match_comment = copy_string(GlobalState.position_match_comment);
+    }
+    else {
+        match_comment = get_FEN_string(board);
+    }
     StringList *current_comment = save_string_list_item(NULL, match_comment);
     CommentList *comment = (CommentList*) malloc_or_die(sizeof (*comment));
 
@@ -2422,4 +2692,35 @@ shannonEvaluation(const Board *board)
     shannonValue = (whitePieceCount - blackPieceCount) +
             (whiteMoveCount - blackMoveCount) * 0.1;
     return shannonValue;
+}
+
+/* Look for comment_pattern in the given list of comments.
+ * If found, return where it was found, otherwise NULL.
+ */
+static StringList *
+find_matching_comment(const char *comment_pattern,
+                      const CommentList *comment)
+{
+    Boolean match = FALSE;
+    StringList *string_list;
+    while(!match && comment != NULL) {
+        string_list = comment->comment;
+        while(!match && string_list != NULL) {
+            if(strcmp(comment_pattern, string_list->str) == 0) {
+                match = TRUE;
+            }
+            else {
+                string_list = string_list->next;
+            }
+        }
+        if(!match) {
+            comment = comment->next;
+        }
+    }
+    if(match) {
+        return string_list;
+    }
+    else {
+        return (StringList *) NULL;
+    }
 }

@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 /***
@@ -176,7 +175,7 @@ compose_variation(char *line)
         else {
             /* See if we need some more space. */
             if (num_moves == max_moves) {
-                move_list = (variant_move *) realloc((void *) move_list,
+                move_list = (variant_move *) realloc_or_die((void *) move_list,
                         (max_moves + MOVE_INCREMENT) * sizeof (*move_list));
                 if (move_list == NULL) {
                     /* Catastrophic failure. */
@@ -274,7 +273,7 @@ compose_positional_variation(char *line)
     /* Build a linked list of the moves of the variation. */
     Move *head = NULL, *tail = NULL;
     Boolean Ok = TRUE;
-    /* Keep track of the depth. */
+    /* Keep track of the ply depth. */
     unsigned depth = 0;
 
     move = strtok(line, " ");
@@ -309,10 +308,10 @@ compose_positional_variation(char *line)
     if (Ok) {
         /* Determine whether the depth of this variation exceeds
          * the current default.
-         * Depth is counted in move pairs.
-         * Add some extras, in order to be surer of catching transpositions.
+         * Depth is counted in ply.
+         * Add some extras, in order to catch transpositions.
          */
-        depth = ((depth + 1) / 2) + 4;
+        depth += 8;
         if (depth > GlobalState.depth_of_positional_search) {
             GlobalState.depth_of_positional_search = depth;
         }
@@ -370,9 +369,9 @@ add_fen_positional_match(const char *fen_string)
 /* Treat fen_pattern as being a position to be matched.
  */
 void
-add_fen_pattern_match(const char *fen_pattern)
+add_fen_pattern_match(const char *fen_pattern, Boolean add_reverse, const char *label)
 {
-    add_fen_pattern(fen_pattern);
+    add_fen_pattern(fen_pattern, add_reverse, label);
     GlobalState.positional_variations = TRUE;
 }
 
@@ -744,7 +743,7 @@ is_stalemate(const Board *board, const Move *moves)
  * and its tag details match those that we are interested in.
  */
 Boolean
-check_textual_variations(Game game_details)
+check_textual_variations(const Game *game_details)
 {
     Boolean wanted = FALSE;
     variation_list *variation;
@@ -753,10 +752,10 @@ check_textual_variations(Game game_details)
         for (variation = games_to_keep; (variation != NULL) && !wanted;
                 variation = variation->next) {
             if (GlobalState.match_permutations) {
-                wanted = permutation_match(game_details.moves, *variation);
+                wanted = permutation_match(game_details->moves, *variation);
             }
             else {
-                wanted = straight_match(game_details.moves, *variation);
+                wanted = straight_match(game_details->moves, *variation);
             }
         }
     }

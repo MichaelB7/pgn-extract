@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -118,7 +117,7 @@ process_tag_line(const char *TagFile, char *line)
             /* Allow for an optional operator. */
             TagOperator operator = NONE;
 
-            /* Skip whitespace up to a double quote. */
+            /* Skip whitespace. */
             while (is_character_class(*linep, WHITESPACE)) {
                 linep++;
             }
@@ -160,7 +159,7 @@ process_tag_line(const char *TagFile, char *line)
                         linep++;
                         break;
                 }
-                /* Skip whitespace up to a double quote. */
+                /* Skip whitespace. */
                 while (is_character_class(*linep, WHITESPACE)) {
                     linep++;
                 }
@@ -173,7 +172,7 @@ process_tag_line(const char *TagFile, char *line)
                 line = resulting_line.line;
                 linep = resulting_line.linep;
                 if (tag_token == TAG) {
-                    /* Treat FEN* tags as a special case.
+                    /* Treat FEN and FENPattern tags as special cases.
                      * Use the position they represent to indicate
                      * a positional match.
                      */
@@ -181,8 +180,25 @@ process_tag_line(const char *TagFile, char *line)
                         add_fen_positional_match(yylval.token_string);
                         (void) free((void *) yylval.token_string);
                     }
-                    else if (tag_index == PSEUDO_FEN_PATTERN_TAG) {
-                        add_fen_pattern_match(yylval.token_string);
+                    else if (tag_index == PSEUDO_FEN_PATTERN_TAG ||
+                            tag_index == PSEUDO_FEN_PATTERN_I_TAG) {
+                        /* Skip whitespace. */
+                        while (is_character_class(*linep, WHITESPACE)) {
+                            linep++;
+                        }
+                        const char *label;
+                        if(*linep != '\0') {
+                            /* Treat the remainder of the line as a label. */
+                            label = (const char *) linep;
+                        }
+                        else {
+                            label = NULL;
+                        }
+                        /* Generate an inverted version as well if
+                         * it is PSEUDO_FEN_PATTERN_I_TAG.
+                         */
+                        add_fen_pattern_match(yylval.token_string, 
+                                tag_index == PSEUDO_FEN_PATTERN_I_TAG, label);
                         (void) free((void *) yylval.token_string);
                     }
                     else {

@@ -1,12 +1,13 @@
 {
 A PGN file of ECO classifications distributed with the PGN extraction
-program, extract. I believe that the original file from which I
+program, pgn-extract. I believe that the original file from which I
 generated this was put together by Ewart Shaw, Franz Hemmer and others,
 to whom appropriate thanks and acknowledgement is due.  Permission has
 been granted for its inclusion with the pgn-extract program, which is
+available from:
 https://www.cs.kent.ac.uk/~djb/pgn-extract/
 
-David Barnes (d.j.barnes@kent.ac.uk)
+David J. Barnes (d.j.barnes@kent.ac.uk)
 }
 
 [ECO "A00"]

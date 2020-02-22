@@ -1,25 +1,23 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
-
 
 /* These colour values are used as modifiers of the Piece values to
  * produce pieces of the appropriate colours.
@@ -106,7 +104,16 @@ typedef struct {
     Boolean EnPassant;
     Rank ep_rank;
     Col ep_col;
-    HashCode hash_value;
+    /* NB: @@@
+     * This value is based on a relatively weak hashing approach
+     * that really needs updating to properly use the Zobrist hash.
+     */
+    HashCode weak_hash_value;
+    /* Provision for storing a Zobrist hash value. However,
+     * this is only set if GlobalState.add_hashcode_comments.
+     * At some point, it should supersede the weak_hash_value.
+     */
+    uint64_t zobrist;
     /* The half-move clock since the last pawn move or capture. */
     unsigned halfmove_clock;
 } Board;
@@ -124,7 +131,7 @@ typedef struct move_pair {
     
 /* Conversion macros. */
 #define PIECE_SHIFT 3
-#define MAKE_COLOURED_PIECE(colour,piece) (((piece) << PIECE_SHIFT) | (colour))
+#define MAKE_COLOURED_PIECE(colour,piece) ((Piece) (((piece) << PIECE_SHIFT) | (colour)))
 #define W(piece) MAKE_COLOURED_PIECE(WHITE,piece)
 #define B(piece) MAKE_COLOURED_PIECE(BLACK,piece)
 /* Conversion macro, from one colour to another. */

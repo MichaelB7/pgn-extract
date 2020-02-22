@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<rss version="2.0">
+
+<channel>
+  <title>Home Page for pgn-extract</title>
+  <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/</link>
+  <description>A Portable Game Notation (PGN) manipulator</description>
+
+  <item>
+    <title>Version 19-04</title>
+    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-19-04.tgz</link>
+    <description>C source code for version 19-04. win32 binary available from
+    the home page. This version fixes a memory error with some positional match
+    combinations and false positives with --repetition.
+    It also adds --xroster to suppress additional tags with -R and adds a short
+    man page courtesy of Vincent Legout.
+    </description>
+    <guid isPermaLink="false">pgn-extract-19-04-announce</guid>
+    <pubDate>23 April 2019 21:00:00 GMT</pubDate>
+  </item>
+
+  <item>
+    <title>Version 18-10</title>
+    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.tgz</link>
+    <description>C source code for version 18-10. win32 binary available from
+    the home page. No major new features. This version cleans up a few things to
+    make the program more robust.
+    </description>
+    <guid isPermaLink="false">pgn-extract-18-10-announce</guid>
+    <pubDate>19 October 2018 18:00:00 GMT</pubDate>
+  </item>
+
+  <item>
+    <title>Using pgn-extract to mine chess data</title>
+    <link>https://blogs.kent.ac.uk/djb/2018/10/14/data-mining-with-pgn-extract/</link>
+    <description>A blog post about using pgn-extract to investigate the
+    effect of material balances, with a particular focus on the case
+    of the bishop pair.
+    </description>
+    <guid isPermaLink="false">pgn-extract-data-mining</guid>
+    <pubDate>16 October 2018 07:45:00 GMT</pubDate>
+  </item>
+
+  <item>
+    <title>Version 18-08</title>
+    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.tgz</link>
+    <description>C source code for version 18-08. win32 binary available from
+    the home page. This version adds: --dropbefore, -y and fixes the missing
+    SetUp tag with --dropply.
+    </description>
+    <guid isPermaLink="false">pgn-extract-18-08-announce</guid>
+    <pubDate>14 October 2018 14:05:00 GMT</pubDate>
+  </item>
+
+</channel>
+
+</rss>

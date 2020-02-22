@@ -1,31 +1,33 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #include "bool.h"
 #include "mymalloc.h"
 #include "defs.h"
 #include "typedef.h"
+#include "grammar.h"
 #include "apply.h"
 #include "fenmatcher.h"
 
@@ -37,6 +39,7 @@
 #define ZERO_OR_MORE_OF_ANYTHING '*'
 #define ANY_WHITE_PIECE 'A'
 #define ANY_BLACK_PIECE 'a'
+#define NOT_A_PAWN 'm'
 
 /* Symbols for closures. */
 #define CCL_START '['
@@ -50,35 +53,77 @@
  * and ideas from Kernighan and Plauger's "Software Tools".
  */
 
+/* The list of FEN-based patterns to match. */
+typedef struct FENPattern {
+    char **pattern_ranks;
+    const char *optional_label;
+    struct FENPattern *next;
+} FENPattern;
+
+/* A single rank of a FEN-based patterns to match.
+ * Ranks are chained as a linear list via next_rank and
+ * alternatives for the same rank via alternative_rank.
+ * The optional_label (if any) is stored with the final rank of
+ * the list.
+ */
+typedef struct FENPatternMatch {
+    char *rank;
+    const char *optional_label;
+    struct FENPatternMatch *alternative_rank;
+    struct FENPatternMatch *next_rank;
+} FENPatternMatch;
+
+static FENPatternMatch *pattern_tree = NULL;
+
 static Boolean matchhere(const char *regexp, const char *text);
 static Boolean matchstar(const char *regexp, const char *text);
 static Boolean matchccl(const char *regexp, const char *text);
 static Boolean matchnccl(const char *regexp, const char *text);
 static Boolean matchone(char regchar, char textchar);
-static char *convert_board_to_text(const Board *board);
+static void convert_rank_to_text(const Board *board, Rank rank, char *text);
+static const char *reverse_fen_pattern(const char *pattern);
+static void pattern_tree_insert(char **ranks, const char *label);
+static void insert_pattern(FENPatternMatch *node, FENPatternMatch *next);
+static const char *pattern_match_rank(const Board *board, 
+        FENPatternMatch *pattern, int patternIndex, 
+        char ranks[BOARDSIZE+1][BOARDSIZE+1]);
 
-/* The list of FEN-based patterns to match. */
-static StringList *fen_patterns = NULL;
-
+/*
+ * Add a FENPattern to be matched. If add_reverse is TRUE then
+ * additionally add a second pattern that has the colours reversed.
+ * If label is non-NULL then associate it with fen_pattern for possible
+ * output in a tag when the pattern is matched.
+ */
 void
-add_fen_pattern(const char *fen_pattern)
+add_fen_pattern(const char *fen_pattern, Boolean add_reverse, const char *label)
 {
-    /* Check the pattern a reasonable syntax. */
+    /* Check the pattern has reasonable syntax. */
     /* Count the number of rank dividers. */
-    int dividors = 0;
+    int dividers = 0;
     /* Count the number of symbols in each rank - must be
      * at least one.
      */
     int rankSymbols = 0;
     Boolean ok = TRUE;
     const char *p = fen_pattern;
+    const char *rank_start = fen_pattern;
     Boolean in_closure = FALSE;
-    while (*p != '\0' && ok) {
+    char **ranks = (char **) malloc_or_die(BOARDSIZE * sizeof(*ranks));
+    while (*p != '\0' && *p != ' ' && ok) {
         if (*p == '/') {
-            dividors++;
+            /* End of this rank. */
             if (rankSymbols == 0) {
                 /* Nothing on the previous rank. */
                 ok = FALSE;
+            }
+            else {
+                int num_chars = p - rank_start;
+                ranks[dividers] = (char *) malloc_or_die(num_chars + 1);
+                strncpy(ranks[dividers], rank_start, num_chars);
+                ranks[dividers][num_chars] = '\0';            
+                dividers++;
+                
+                rank_start = p + 1;
             }
             rankSymbols = 0;
         }
@@ -120,15 +165,44 @@ add_fen_pattern(const char *fen_pattern)
         }
         p++;
     }
-    if (dividors != 7) {
+    if (dividers != BOARDSIZE - 1) {
         ok = FALSE;
     }
     else if (rankSymbols == 0) {
         ok = FALSE;
     }
+    else if(ok) {
+        /* Store the final regexp of the pattern. */
+        int num_chars = p - rank_start;
+        ranks[dividers] = (char *) malloc_or_die(num_chars + 1);
+        strncpy(ranks[dividers], rank_start, num_chars);
+        ranks[dividers][num_chars] = '\0';            
+    }
     if (ok) {
-        const char *pattern = copy_string(fen_pattern);
-        fen_patterns = save_string_list_item(fen_patterns, pattern);
+        pattern_tree_insert(ranks, label != NULL ? copy_string(label) : copy_string(""));
+        
+        /* Do the same again if a reversed version is required. */
+        if(add_reverse) {
+            char *pattern = copy_string(fen_pattern);
+            /* Terminate at the end of the board position
+               as we are not interested in the castling rights
+               or who is to move.
+             */
+            pattern[p - fen_pattern] = '\0';
+            const char *reversed = reverse_fen_pattern(pattern);
+            if(label != NULL) {
+                /* Add a suffix to make it clear that this is
+                 * a match of the inverted form.
+                 */
+                char *rlabel = (char *) malloc_or_die(strlen(label) + 1 + 1);
+                strcpy(rlabel, label);
+                strcat(rlabel, "I");
+                add_fen_pattern(reversed, FALSE, rlabel);
+            }
+            else {
+                add_fen_pattern(reversed, FALSE, "");
+            }
+        }
     }
     else {
         fprintf(GlobalState.logfile, "FEN Pattern: %s badly formed.\n",
@@ -136,42 +210,177 @@ add_fen_pattern(const char *fen_pattern)
     }
 }
 
+/* Invert the colour sense of the given FENPattern.
+ * Return the inverted form.
+ */
+static const char *reverse_fen_pattern(const char *pattern)
+{
+    /* Completely switch the rows and invert the case of each piece letter. */
+    char **rows = (char **) malloc_or_die(8 * sizeof(*rows));
+    char *start = copy_string(pattern);
+    char *end = start;
+    /* Isolate each row in its new order. */
+    int row;
+    for(row = BOARDSIZE - 1; row >= 0 && *start != '\0'; row--) {
+        /* Find the end of the next row. */
+        while(*end != '/' && *end != '\0') {
+            end++;
+        }
+        rows[row] = (char *) malloc_or_die((end - start + 1) * sizeof(**rows));
+        strncpy(rows[row], start, end - start);
+        rows[row][end - start] = '\0';
+        start = end;
+        if(*start != '\0') {
+            start++;
+        }
+        end++;
+    }
+    char *reversed = (char *) malloc_or_die(strlen(pattern) + 1);
+    /* Copy across the rows, flipping the colours. */
+    char *nextchar = reversed;
+    for(row = 0; row < 8; row++) {
+        const char *text = rows[row];
+        while(*text != '\0') {
+            if(isalpha(*text)) {
+                if(islower(*text)) {
+                    *nextchar = toupper(*text);
+                }
+                else {
+                    *nextchar = tolower(*text);
+                }
+            }
+            else {
+                *nextchar = *text;
+            }
+            text++;
+            nextchar++;
+        }
+        if(row != BOARDSIZE - 1) {
+            *nextchar = '/';
+            nextchar++;
+        }
+    }
+    *nextchar = '\0';
+    return reversed;
+}
+
+/*
+ * Insert the ranks of a single pattern into the current pattern tree
+ * to consolidate similar patterns.
+ */
+static void
+pattern_tree_insert(char **ranks, const char *label)
+{
+    FENPatternMatch *match = (FENPatternMatch *) malloc_or_die(sizeof(*match));
+    /* Create a linked list for the ranks. 
+     * Place the label in the final link.
+     */
+    FENPatternMatch *next = match;
+    for(int i = 0; i < BOARDSIZE; i++) {
+        next->rank = ranks[i];
+        next->alternative_rank = NULL;
+        if(i != BOARDSIZE - 1) {
+            next->next_rank = (FENPatternMatch *) malloc_or_die(sizeof(*match));
+            next = next->next_rank;
+        }
+        else {
+            next->next_rank = NULL;
+            next->optional_label = label;
+        }
+    }
+    if(pattern_tree == NULL) {
+        pattern_tree = match;
+    }
+    else {
+        /* Find the place to insert this list in the existing tree. */
+        insert_pattern(pattern_tree, match);
+    }
+}
+
+/* Starting at node, try to insert next into the tree.
+ * Return TRUE on success, FALSE on failure.
+ */
+static void 
+insert_pattern(FENPatternMatch *node, FENPatternMatch *next)
+{
+    Boolean inserted = FALSE;
+    while(!inserted && strcmp(node->rank, next->rank) == 0) {
+        if(node->next_rank != NULL) {
+            /* Same pattern. Move to the next rank of both. */
+            node = node->next_rank;
+            next = next->next_rank;
+        }
+        else {
+            /* Patterns are duplicates. */
+            fprintf(GlobalState.logfile, "Warning: duplicate FEN patterns detected.\n");
+            inserted = TRUE;
+        }
+    }
+    if(!inserted) {
+        /* Insert as an alternative. */
+        if(node->alternative_rank != NULL) {
+            insert_pattern(node->alternative_rank, next);
+        }
+        else {
+            node->alternative_rank = next;
+        }
+    }
+}
+
 /*
  * Try to match the board against one of the FEN patterns.
- * Return the matching pattern, if there is one, otherwise NULL.
+ * Return NULL if no match, otherwise a possible label for the
+ * match to be added to the game's tags. An empty string is
+ * used for no label.
  */
 const char *
 pattern_match_board(const Board *board)
 {
-    Boolean match = FALSE;
-    const char *pattern = NULL;
-    if (fen_patterns != NULL) {
-        const char *text = convert_board_to_text(board);
+    const char *match_label = NULL;
+    if(pattern_tree != NULL) {
+        /* Don't convert any ranks of the board until they
+         * are required.
+         */
+        char ranks[BOARDSIZE+1][BOARDSIZE+1];
+        for(int i = 0; i < BOARDSIZE; i++) {
+            ranks[i][0] = '\0';
+        }
+        match_label = pattern_match_rank(board, pattern_tree, 0, ranks);
+    }
+    return match_label;
+}
 
-        StringList *item = fen_patterns;
 
-        while (item != NULL && !match) {
-            if (0) printf("Try %s against %s\n", item->str, text);
-            pattern = item->str;
-            if (matchhere(pattern, text)) {
-                if (0) fprintf(stdout, "%s matches\n%s\n", pattern, text);
-                match = TRUE;
+/* Match ranks[patternIndex ...] against board and return the
+ * corresponding match label if a match is found. Otherwise
+ * return NULL.
+ */
+static const char *pattern_match_rank(const Board *board, FENPatternMatch *pattern, int patternIndex, char ranks[BOARDSIZE+1][BOARDSIZE+1])
+{
+    const char *match_label = NULL;
+    if(ranks[patternIndex][0] == '\0') {
+        /* Convert the required rank.
+         * Convert the others when/if needed.
+         */
+        convert_rank_to_text(board, LASTRANK - patternIndex, ranks[patternIndex]);
+    }
+    while(match_label == NULL && pattern != NULL) {
+        if(matchhere(pattern->rank, ranks[patternIndex])) {
+            if(patternIndex == BOARDSIZE - 1) {
+                /* A complete match. */
+                match_label = pattern->optional_label;
             }
             else {
-                item = item->next;
+                /* Try next rank.*/
+                match_label = pattern_match_rank(board, pattern->next_rank, patternIndex + 1, ranks);
             }
         }
-        (void) free((void *) text);
-        if (match) {
-            return pattern;
-        }
-        else {
-            return (const char *) NULL;
+        
+        if(match_label == NULL) {
+            pattern = pattern->alternative_rank;
         }
     }
-    else {
-        return (const char *) NULL;
-    }
+    return match_label;
 }
 
 /**
@@ -194,6 +403,7 @@ matchhere(const char *regexp, const char *text)
             case NON_EMPTY_SQUARE:
             case ANY_WHITE_PIECE:
             case ANY_BLACK_PIECE:
+            case NOT_A_PAWN:
                 if (matchone(*regexp, *text)) {
                     return matchhere(regexp + 1, text + 1);
                 }
@@ -248,7 +458,7 @@ matchstar(const char *regexp, const char *text)
     const char *t;
 
     /* Find the end of this rank. */
-    for (t = text; *t != '\0' && *t != '/'; t++) {
+    for (t = text; *t != '\0'; t++) {
         ;
     }
     /* Try from the longest match to the shortest until success. */
@@ -302,6 +512,14 @@ matchone(char regchar, char textchar)
                 }
             case ANY_SQUARE_STATE:
                 return TRUE;
+            case NOT_A_PAWN:
+                switch(textchar) {
+                    case 'P':
+                    case 'p':
+                        return FALSE;
+                    default:
+                        return TRUE;
+                }
             default:
                 return FALSE;
         }
@@ -347,6 +565,7 @@ matchnccl(const char *regexp, const char *text)
     }
 }
 
+#if 0
 /* Build a basic EPD string from the given board. */
 static char *
 convert_board_to_text(const Board *board)
@@ -356,10 +575,10 @@ convert_board_to_text(const Board *board)
     /* Allow space for a full board and '/' separators in between. */
     char *text = (char *) malloc_or_die(8 * 8 + 8);
     for (rank = LASTRANK; rank >= FIRSTRANK; rank--) {
+        const Piece *rankP = board->board[RankConvert(rank)];
         Col col;
         for (col = FIRSTCOL; col <= LASTCOL; col++) {
-            int coloured_piece = board->board[RankConvert(rank)]
-                    [ColConvert(col)];
+            int coloured_piece = rankP[ColConvert(col)];
             if (coloured_piece != EMPTY) {
                 text[ix] = coloured_piece_to_SAN_letter(coloured_piece);
             }
@@ -375,4 +594,25 @@ convert_board_to_text(const Board *board)
     }
     text[ix] = '\0';
     return text;
+}
+#endif
+
+/* Build a basic EPD string from rank of the given board. */
+static void
+convert_rank_to_text(const Board *board, Rank rank, char *text)
+{
+    const Piece *rankP = board->board[RankConvert(rank)];
+    int ix = 0;
+    Col col;
+    for (col = FIRSTCOL; col <= LASTCOL; col++) {
+        int coloured_piece = rankP[ColConvert(col)];
+        if (coloured_piece != EMPTY) {
+            text[ix] = coloured_piece_to_SAN_letter(coloured_piece);
+        }
+        else {
+            text[ix] = EMPTY_SQUARE;
+        }
+        ix++;
+    }
+    text[ix] = '\0';
 }

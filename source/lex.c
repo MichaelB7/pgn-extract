@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -91,6 +90,8 @@ static short MoveChars[MAX_CHAR];
  */
 static const char **TagList;
 static unsigned tag_list_length = 0;
+/* Nested comment depth: GlobalState.allow_nested_comments. */
+static unsigned comment_depth = 0;
 
 /* Initialise the TagList. This should be stored in alphabetical order,
  * by virtue of the order in which the _TAG values are defined.
@@ -121,8 +122,11 @@ init_list_of_known_tags(void)
     TagList[EVENT_SPONSOR_TAG] = "EventSponsor";
     TagList[FEN_TAG] = "FEN";
     TagList[PSEUDO_FEN_PATTERN_TAG] = "FENPattern";
+    TagList[PSEUDO_FEN_PATTERN_I_TAG] = "FENPatternI";
     TagList[HASHCODE_TAG] = "HashCode";
     TagList[LONG_ECO_TAG] = "LongECO";
+    TagList[MATCHLABEL_TAG] = "MatchLabel";
+    TagList[MATERIAL_MATCH_TAG] = "MaterialMatch";
     TagList[MODE_TAG] = "Mode";
     TagList[NIC_TAG] = "NIC";
     TagList[OPENING_TAG] = "Opening";
@@ -141,6 +145,7 @@ init_list_of_known_tags(void)
     TagList[TOTAL_PLY_COUNT_TAG] = "TotalPlyCount";
     TagList[UTC_DATE_TAG] = "UTCDate";
     TagList[UTC_TIME_TAG] = "UTCTime";
+    TagList[VARIANT_TAG] = "Variant";
     TagList[VARIATION_TAG] = "Variation";
     TagList[WHITE_TAG] = "White";
     TagList[WHITE_ELO_TAG] = "WhiteElo";
@@ -330,7 +335,7 @@ gather_string(char *line, unsigned char *linep)
     /* The last one doesn't belong in the string. */
     len--;
     /* Allocate space for the result. */
-    str = malloc_or_die(len + 1);
+    str = (char *) malloc_or_die(len + 1);
     strncpy(str, (const char *) (linep - len - 1), len);
     str[len] = '\0';
     /* Store it in yylval. */
@@ -382,6 +387,9 @@ gather_comment(char *line, unsigned char *linep)
     StringList *current_comment = NULL;
     /* The pointer to be returned. */
     CommentList *comment;
+    
+    /* GlobalState.allow_nested_comments. */
+    comment_depth++;
 
     do {
         /* Restart a new segment. */
@@ -389,16 +397,49 @@ gather_comment(char *line, unsigned char *linep)
         do {
             ch = *linep++;
             len++;
+            if(ch == '{') {
+                if(GlobalState.allow_nested_comments) {
+                    comment_depth++;
+                }
+            }
+            else if(ch == '}') {
+                if(GlobalState.allow_nested_comments) {
+                    if(comment_depth > 1) {
+                        comment_depth--;
+                        /* Prevent this terminating the outer level. */
+                        ch = ' ';
+                    }
+                }                
+            }
+            else {
+                /* No further action. */
+            }
         } while ((ch != '}') && (ch != '\0'));
-        /* The last one doesn't belong in the comment. */
+        if(ch == '}') {
+            comment_depth--;
+        }
+        /* The last character doesn't belong in the comment. */
         len--;
         if (GlobalState.keep_comments) {
             char *comment_str;
 
+            unsigned const char *str = linep - len - 1;
+            int numchars = len;
+            /* Trim spaces from the end.*/
+            int end = numchars - 1;
+            while(end >= 0 && str[end] == ' ') {
+                end--;
+            }
+            end++;
+            /* Trim spaces from the start. */
+            int start = 0;
+            while(start < end && str[start] == ' ') {
+                start++;
+            }
             /* Allocate space for the result. */
-            comment_str = (char *) malloc_or_die(len + 1);
-            strncpy(comment_str, (const char *) (linep - len - 1), len);
-            comment_str[len] = '\0';
+            comment_str = (char *) malloc_or_die(end - start + 1);
+            strncpy(comment_str, (const char *) (str + start), end - start);
+            comment_str[end - start] = '\0';
             current_comment = save_string_list_item(current_comment, comment_str);
         }
         if (ch == '\0') {
@@ -406,9 +447,13 @@ gather_comment(char *line, unsigned char *linep)
             linep = (unsigned char *) line;
         }
     } while ((ch != '}') && (line != NULL));
+    if(comment_depth > 0) {
+        fprintf(GlobalState.logfile, "Missing end of a nested comment.\n");
+        report_details(GlobalState.logfile);
+    }
 
     /* Set up the structure to be returned. */
-    comment = malloc_or_die(sizeof (*comment));
+    comment = (CommentList *) malloc_or_die(sizeof (*comment));
     comment->comment = current_comment;
     comment->next = NULL;
     yylval.comment = comment;
@@ -563,7 +608,7 @@ gather_tag(char *line, unsigned char *linep)
             char *tag_string;
 
             /* Allocate space for the result. */
-            tag_string = malloc_or_die(len + 1);
+            tag_string = (char *) malloc_or_die(len + 1);
             strncpy((char *) tag_string, (const char *) (linep - len), len);
             tag_string[len] = '\0';
             tag_item = identify_tag(tag_string);
@@ -789,16 +834,29 @@ get_next_symbol(void)
                             token = NO_TOKEN;
                         }
                     }
+                    else if (next_char == 'Z' && *linep == '0') {
+                        linep++;
+                        save_move((const unsigned char *) NULL_MOVE_STRING);
+                        token = MOVE;
+                    }
                     else {
                         if (!GlobalState.skipping_current_game) {
                             print_error_context(GlobalState.logfile);
                             fprintf(GlobalState.logfile,
                                     "Unknown character %c (Hex: %x).\n",
                                     next_char, next_char);
+                            fprintf(GlobalState.logfile, "%s\n", line);
+                            unsigned pos = linep - (unsigned char *) line - 1;
+                            for(unsigned i = 0; i < pos; i++) {
+                                fputc(' ', GlobalState.logfile);
+                            }
+                            fputc('^', GlobalState.logfile);
+                            fputc('\n', GlobalState.logfile);
                         }
                         /* Skip any sequence of them. */
-                        while (ChTab[(unsigned) *linep] == ERROR_TOKEN)
+                        while (ChTab[(unsigned) *linep] == ERROR_TOKEN) {
                             linep++;
+                        }
                     }
                     break;
                 case DIGIT:
@@ -859,8 +917,9 @@ get_next_symbol(void)
                                 next_char, next_char);
                     }
                     /* Skip any sequence of them. */
-                    while (ChTab[(unsigned) *linep] == ERROR_TOKEN)
+                    while (ChTab[(unsigned) *linep] == ERROR_TOKEN) {
                         linep++;
+                    }
                     break;
                 case OPERATOR:
                     print_error_context(GlobalState.logfile);
@@ -961,6 +1020,10 @@ save_k_castle(void)
 static void
 save_move(const unsigned char *move)
 {
+    if(strlen((char *) move) > MAX_MOVE_LEN) {
+        fprintf(stderr, "Internal error: cannot handle %s (too long)\n", move);
+        exit(1);
+    }
     /* Decode the move into its components. */
     yylval.move_details = decode_move(move);
     /* Remember the last move. */
@@ -1061,11 +1124,11 @@ add_filename_to_source_list(const char *filename, SourceFileType file_type)
             list_of_files.num_files = 0;
         }
         else {
-            list_of_files.files = (const char **) realloc((void *) list_of_files.files,
+            list_of_files.files = (const char **) realloc_or_die((void *) list_of_files.files,
                     (list_of_files.max_files + MORE_LIST_SPACE + 1) *
                     sizeof (const char *));
             list_of_files.file_type = (SourceFileType *)
-                    realloc((void *) list_of_files.file_type,
+                    realloc_or_die((void *) list_of_files.file_type,
                     (list_of_files.max_files + MORE_LIST_SPACE + 1) *
                     sizeof (SourceFileType));
             list_of_files.max_files += MORE_LIST_SPACE;
@@ -1107,7 +1170,7 @@ add_filename_to_source_list(const char *filename, SourceFileType file_type)
 static Boolean
 open_input(const char *infile)
 {
-    yyin = fopen(infile, "r");
+    yyin = fopen(infile, "rb");
     if (yyin != NULL) {
         GlobalState.current_input_file = infile;
         if (GlobalState.verbosity > 1) {
@@ -1200,7 +1263,7 @@ save_string(const char *str)
     const size_t len = strlen(str);
     char *token;
 
-    token = malloc_or_die(len + 1);
+    token = (char *) malloc_or_die(len + 1);
     strcpy(token, str);
     yylval.token_string = token;
 }

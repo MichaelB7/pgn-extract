@@ -1,24 +1,24 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2012 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,6 +93,7 @@ StateInfo GlobalState = {
     FALSE,              /* check_for_repetition (--repetition) */
     FALSE,              /* check_for_fifty_move_rule (--fifty) */
     FALSE,              /* tag_match_anywhere (--tagsubstr) */
+    FALSE,              /* match_underpromotion (--underpromotion) */
     0,                  /* depth_of_positional_search */
     0,                  /* num_games_processed */
     0,                  /* num_games_matched */
@@ -103,17 +104,29 @@ StateInfo GlobalState = {
     -1,                 /* output_ply_limit (--plylimit) */
     0,                  /* stability_threshold (--stable) */
     0,                  /* maximum_matches */
+    0,                  /* drop_ply_number (--dropply) */
     FALSE,              /* output_FEN_string */
     FALSE,              /* add_FEN_comments (--fencomments) */
     FALSE,              /* add_hashcode_comments (--hashcomments) */
     FALSE,              /* add_position_match_comments (--markmatches) */
+    FALSE,              /* output_plycount (--plycount) */
     FALSE,              /* output_total_plycount (--totalplycount) */
     FALSE,              /* add_hashcode_tag (--addhashcode) */
     FALSE,              /* fix_result_tags (--fixresulttags) */
+    FALSE,              /* separate_comment_lines (--commentlines) */
+    FALSE,              /* split_variants (--separatevariants) */
+    FALSE,              /* reject_inconsistent_results (--nobadresults) */
+    FALSE,              /* allow_null_moves (--allownullmoves) */
+    FALSE,              /* allow_nested_comments (--nestedcomments) */
+    FALSE,              /* add_match_tag (--addmatchtag) */
+    FALSE,              /* add_matchlabel_tag (--addlabeltag) */
+    FALSE,              /* only_output_wanted_tags (--xroster) */
+    0,                  /* split_depth_limit */
     NORMALFILE,         /* current_file_type */
     SETUP_TAG_OK,       /* setup_status */
     "MATCH",            /* position_match_comment (--markpositionmatches) */
     (char *) NULL,      /* FEN_comment_pattern (-Fpattern) */
+    (char *) NULL,      /* drop_comment_pattern (--dropbefore) */
     (char *) NULL,      /* current_input_file */
     DEFAULT_ECO_FILE,   /* eco_file (-e) */
     (FILE *) NULL,      /* outputfile (-o, -a). Default is stdout */
@@ -306,11 +319,13 @@ main(int argc, char *argv[])
                 case MOVES_ARGUMENT:
                 case POSITIONS_ARGUMENT:
                 case ENDINGS_ARGUMENT:
-                { /* From the command line, we require an
-                         * associated file argument.
-                         * Check this here, as it is not the case
-                         * when reading arguments from an argument file.
-                         */
+                case ENDINGS_COLOURED_ARGUMENT:
+                { 
+                    /* From the command line, we require an
+                     * associated file argument.
+                     * Check this here, as it is not the case
+                     * when reading arguments from an argument file.
+                     */
                     const char *filename = &(argument[2]);
                     const char argument_letter = argument[1];
                     if (*filename == '\0') {
@@ -361,9 +376,7 @@ main(int argc, char *argv[])
                 GlobalState.output_format != CM &&
                 GlobalState.ECO_level == DONT_DIVIDE) {
             GlobalState.keep_comments = FALSE;
-            GlobalState.keep_NAGs = FALSE;
             GlobalState.keep_variations = FALSE;
-            GlobalState.keep_move_numbers = FALSE;
             GlobalState.keep_results = FALSE;
         }
         else {

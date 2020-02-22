@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -211,7 +210,7 @@ piece_is_colour(Piece coloured_piece, Colour colour)
     return EXTRACT_COLOUR(coloured_piece) == colour;
 }
 
-/* Make the given move.  This is assumed to have been thoroughly
+/* Make the given move. This is assumed to have been thoroughly
  * checked beforehand, and the from_ and to_ information to be
  * complete.  Update the board structure to reflect
  * the full set of changes implied by it.
@@ -303,7 +302,7 @@ make_move(MoveClass class, Col from_col, Rank from_rank, Col to_col, Rank to_ran
                     (board->ep_col == to_col)) {
                 /* This is an ep capture. Remove the intermediate pawn. */
                 board->board[RankConvert(to_rank) - 1][ColConvert(to_col)] = EMPTY;
-                board->hash_value ^= hash_lookup(to_col, to_rank - 1, PAWN, BLACK);
+                board->weak_hash_value ^= hash_lookup(to_col, to_rank - 1, PAWN, BLACK);
                 board->EnPassant = FALSE;
             }
             else {
@@ -320,7 +319,7 @@ make_move(MoveClass class, Col from_col, Rank from_rank, Col to_col, Rank to_ran
                     (board->ep_col == to_col)) {
                 /* This is an ep capture. Remove the intermediate pawn. */
                 board->board[RankConvert(to_rank) + 1][ColConvert(to_col)] = EMPTY;
-                board->hash_value ^= hash_lookup(to_col, to_rank + 1, PAWN, WHITE);
+                board->weak_hash_value ^= hash_lookup(to_col, to_rank + 1, PAWN, WHITE);
                 board->EnPassant = FALSE;
             }
             else {
@@ -331,10 +330,10 @@ make_move(MoveClass class, Col from_col, Rank from_rank, Col to_col, Rank to_ran
     /* Clear the source square. */
     if (class == PAWN_MOVE_WITH_PROMOTION && piece != PAWN) {
         /* Remove the promoted pawn. */
-        board->hash_value ^= hash_lookup(from_col, from_rank, PAWN, colour);
+        board->weak_hash_value ^= hash_lookup(from_col, from_rank, PAWN, colour);
     }
     else {
-        board->hash_value ^= hash_lookup(from_col, from_rank, piece, colour);
+        board->weak_hash_value ^= hash_lookup(from_col, from_rank, piece, colour);
     }
     board->board[from_r][from_c] = EMPTY;
     if (board->board[to_r][to_c] != EMPTY) {
@@ -345,7 +344,7 @@ make_move(MoveClass class, Col from_col, Rank from_rank, Col to_col, Rank to_ran
         
         removed_piece = EXTRACT_PIECE(coloured_piece);
         removed_colour = EXTRACT_COLOUR(coloured_piece);
-        board->hash_value ^= hash_lookup(to_col, to_rank, removed_piece, removed_colour);
+        board->weak_hash_value ^= hash_lookup(to_col, to_rank, removed_piece, removed_colour);
         /* See whether the removed piece is a Rook, as this could
          * affect castling rights.
          */
@@ -395,19 +394,23 @@ make_move(MoveClass class, Col from_col, Rank from_rank, Col to_col, Rank to_ran
     /* Place the piece at its destination. */
     board->board[to_r][to_c] = MAKE_COLOURED_PIECE(colour, piece);
     /* Insert the moved piece into the hash value. */
-    board->hash_value ^= hash_lookup(to_col, to_rank, piece, colour);
+    board->weak_hash_value ^= hash_lookup(to_col, to_rank, piece, colour);
+    if(!board->EnPassant) {
+        board->ep_rank = '\0';
+        board->ep_col = '\0';
+    }
 
     if (castling_rook_col != '\0') {
         /* The rook involved in the castling move must now be moved. */
         if (castling_rook_col != to_col) {
             /* It must be removed. */
-            board->hash_value ^= hash_lookup(castling_rook_col, from_rank, ROOK, colour);
+            board->weak_hash_value ^= hash_lookup(castling_rook_col, from_rank, ROOK, colour);
             board->board[from_r][ColConvert(castling_rook_col)] = EMPTY;
         }
         int rook_offset = (class == KINGSIDE_CASTLE ? -1 : 1);
         /* Place the rook at its destination. */
         board->board[to_r][to_c + rook_offset] = MAKE_COLOURED_PIECE(colour, ROOK);
-        board->hash_value ^= hash_lookup(to_col + rook_offset, to_rank, ROOK, colour);
+        board->weak_hash_value ^= hash_lookup(to_col + rook_offset, to_rank, ROOK, colour);
     }
 }
 
@@ -676,6 +679,39 @@ find_king_moves(Col to_col, Rank to_rank, Colour colour, const Board *board)
         if (board->board[r][c] == target_piece) {
             move_list = append_move_pair(ToCol(c), ToRank(r), to_col, to_rank, move_list);
             found = TRUE;
+        }
+    }
+    if(!found) {
+        /* Check for possible Chess960 castling moves.
+         * Represented as a move to the position occupied by
+         * one of colour's own rooks.
+         */
+        Boolean possible_castling_move = FALSE;
+        if(colour == WHITE) {
+            if(to_rank == '1') {
+                if(to_col == board->WKingCastle || to_col == board->WQueenCastle) {
+                    possible_castling_move = TRUE;
+                }
+            }
+        }
+        else {
+            if(to_rank == '8') {
+                if(to_col == board->BKingCastle || to_col == board->BQueenCastle) {
+                    possible_castling_move = TRUE;
+                }
+            }
+        }
+        if(possible_castling_move) {
+            int c = ColConvert(COLBASE);
+            for(char col = COLBASE; col < COLBASE + BOARDSIZE && !found; col++ ) {
+                if(board->board[to_r][c] == target_piece) {
+                    move_list = append_move_pair(col, to_rank, to_col, to_rank, move_list);
+                    found = TRUE;
+                }
+                else {
+                    c++;
+                }
+            }
         }
     }
     return move_list;
@@ -1617,6 +1653,10 @@ kingside_castle(Move *move_details, Colour colour, Board *board)
 
         move_details->from_col = find_castling_king_col(colour, board);
         move_details->from_rank = rank;
+        /* @@@ Chess960 has different requirements on output.
+         * to_col should be the column of the corresponding Rook
+         * but is used within the program as the true target of the King..
+         */
         move_details->to_col = 'g';
         move_details->to_rank = rank;
         Ok = TRUE;
@@ -1639,6 +1679,10 @@ queenside_castle(Move *move_details, Colour colour, Board *board)
 
         move_details->from_col = find_castling_king_col(colour, board);
         move_details->from_rank = rank;
+        /* @@@ Chess960 has different requirements on output.
+         * to_col should be the column of the corresponding Rook
+         * but is used within the program as the true target of the King..
+         */
         move_details->to_col = 'c';
         move_details->to_rank = rank;
         Ok = TRUE;
@@ -1661,41 +1705,69 @@ king_move(Move *move_details, Colour colour, Board *board)
     Rank from_rank = move_details->from_rank;
     Col to_col = move_details->to_col;
     Rank to_rank = move_details->to_rank;
-    int to_r = RankConvert(to_rank);
-    int to_c = ColConvert(to_col);
     /* Find all possible king moves to the destination squares. */
     MovePair *move_list = find_king_moves(to_col, to_rank, colour, board);
     /* Assume that it is ok. */
     Boolean Ok = TRUE;
 
-    /* Exclude disambiguated and illegal moves. */
-    move_list = exclude_moves(KING, colour, from_col, from_rank, move_list, board);
-
     if (move_list == NULL) {
-        fprintf(GlobalState.logfile, "No king move possible to %c%c.\n", to_col, to_rank);
+        fprintf(GlobalState.logfile, "No king move possible to %c%c.\n",
+                to_col, to_rank);
         Ok = FALSE;
-    }
-    else if (move_list->next == NULL) {
-        /* Only one possible.  Check for legality. */
-        Piece occupant = board->board[to_r][to_c];
-
-        if ((occupant == EMPTY) || piece_is_colour(occupant, OPPOSITE_COLOUR(colour))) {
-            move_details->from_col = move_list->from_col;
-            move_details->from_rank = move_list->from_rank;
-        }
-        else {
-            fprintf(GlobalState.logfile, "King's destination square %c%c is illegal.\n",
-                    to_col, to_rank);
-            Ok = FALSE;
-        }
-        free_move_pair(move_list);
     }
     else {
-        fprintf(GlobalState.logfile,
-                "Ambiguous king move possible to %c%c.\n", to_col, to_rank);
-        fprintf(GlobalState.logfile, "Multiple kings?!\n");
-        free_move_pair_list(move_list);
-        Ok = FALSE;
+        /* Check for legality. */
+        int to_r = RankConvert(to_rank);
+        int to_c = ColConvert(to_col);
+        Piece occupant = board->board[to_r][to_c];
+
+        if(occupant == MAKE_COLOURED_PIECE(colour, ROOK)) {
+            /* Possible Chess960 castling move. */
+            /* @@@ Strictly speaking, we should check that the Variant tag
+             * is set for this to be a sensible move.
+             */
+            Boolean kingside;
+            if(colour == WHITE) {
+                kingside = move_list->to_col == board->WKingCastle;
+            }
+            else {
+                kingside = move_list->to_col == board->BKingCastle;
+            }
+            if(kingside) {
+                move_details->class = KINGSIDE_CASTLE;
+                Ok = kingside_castle(move_details, colour, board);
+            }
+            else {
+                move_details->class = QUEENSIDE_CASTLE;
+                Ok = queenside_castle(move_details, colour, board);
+            }
+        }
+        else {
+            /* Exclude disambiguated and illegal moves. */
+            move_list = exclude_moves(KING, colour, from_col, from_rank, move_list, board);
+
+            if(move_list == NULL) {
+                fprintf(GlobalState.logfile, "No king move possible to %c%c.\n",
+                        to_col, to_rank);
+                Ok = FALSE;
+            }
+            else if (occupant == EMPTY) {
+                move_details->from_col = move_list->from_col;
+                move_details->from_rank = move_list->from_rank;
+            }
+            else if(piece_is_colour(occupant, OPPOSITE_COLOUR(colour))) {
+                move_details->from_col = move_list->from_col;
+                move_details->from_rank = move_list->from_rank;
+            }
+            else {
+                fprintf(GlobalState.logfile, "King's destination square %c%c is illegal.\n",
+                        to_col, to_rank);
+                Ok = FALSE;
+            }
+        }
+        if(move_list != NULL) {
+            free_move_pair(move_list);
+        }
     }
     return Ok;
 }
@@ -1842,14 +1914,14 @@ determine_move_details(Colour colour, Move *move_details, Board *board)
                 /* We failed to find the move, for some reason. */
                 /* See if it might be a Bishop move with a lower case 'b'. */
                 if (move_details->move[0] == 'b') {
-                    /* See if we can find an valid Bishop alternative for it. */
-                    unsigned char alternative_move[MAX_MOVE_LEN + 1];
-                    Move *alternative;
-
+                    /* See if we can find a valid Bishop alternative for it. */
+                    unsigned char *alternative_move =
+                           (unsigned char *) malloc_or_die(strlen((char *) move_details->move) + 1);
                     strcpy((char *) alternative_move,
                             (const char *) move_details->move);
                     *alternative_move = 'B';
-                    alternative = decode_move((unsigned char *) alternative_move);
+                    Move *alternative = decode_move((unsigned char *) alternative_move);
+                    (void) free((void *) alternative_move);
                     if (alternative != NULL) {
                         Ok = bishop_move(alternative, colour, board);
                         if (Ok) {
@@ -1937,6 +2009,10 @@ determine_move_details(Colour colour, Move *move_details, Board *board)
                 move_details->captured_piece = EMPTY;
             }
         }
+    }
+    if(!Ok) {
+        /* Treat invalid moves as being of an unknown move class. */
+        move_details->class = UNKNOWN_MOVE;
     }
     return Ok;
 }

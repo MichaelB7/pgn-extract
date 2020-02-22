@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -48,6 +47,9 @@
 /* Define a macro to calculate an array's size. */
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof(*arr))
 
+/* A small size for formatted move numbers. */
+#define FORMATTED_NUMBER_SIZE (20)
+
 /* How much text we have output on the current line. */
 static size_t line_length = 0;
 /* The buffer in which each output line of a game is built. */
@@ -56,23 +58,29 @@ static char *output_line = NULL;
 static Boolean print_move(FILE *outputfile, unsigned move_number,
         Boolean print_move_number, Boolean white_to_move,
         const Move *move_details);
+static Boolean
+print_items_following_move(FILE *outputfile, const Move *move_details,
+        unsigned move_number, Boolean white_to_move);
 static void output_STR(FILE *outfp, char **Tags);
 static void show_tags(FILE *outfp, char **Tags, int tags_length);
 static char promoted_piece_letter(Piece piece);
-static void print_algebraic_game(Game current_game, FILE *outputfile,
+static void print_algebraic_game(Game *current_game, FILE *outputfile,
         unsigned move_number, Boolean white_to_move,
         Board *final_board);
-static void print_EPD_game(Game current_game, FILE *outputfile,
+static void print_EPD_game(Game *current_game, FILE *outputfile,
         unsigned move_number, Boolean white_to_move,
         Board *final_board);
-static void print_EPD_move_list(Game current_game, FILE *outputfile,
+static void print_EPD_move_list(Game *current_game, FILE *outputfile,
         unsigned move_number, Boolean white_to_move,
         Board *final_board);
 static const char *build_FEN_comment(const Board *board);
-static void add_total_plycount(const Game *game, Boolean count_variations);
 static void add_hashcode_tag(const Game *game);
 static unsigned count_single_move_ply(const Move *move_details, Boolean count_variations);
 static unsigned count_move_list_ply(Move *move_list, Boolean count_variations);
+static void print_space_separated_str(FILE *outputfile, const char *str);
+static void start_comment(FILE *outputfile);
+static void end_comment(FILE *outputfile);
+static void print_as_comment(FILE *outputfile, const char *str);
 
 /* List, the order in which the tags should be output.
  * The first seven should be the Seven Tag Roster that should
@@ -101,9 +109,11 @@ static int DefaultTagOrder[] = {
     ANNOTATOR_TAG,
     EVENT_DATE_TAG, EVENT_SPONSOR_TAG, SECTION_TAG, STAGE_TAG, BOARD_TAG,
     TIME_TAG, UTC_DATE_TAG, UTC_TIME_TAG,
+    VARIANT_TAG,
     SETUP_TAG,
     FEN_TAG,
     TERMINATION_TAG, MODE_TAG, PLY_COUNT_TAG,
+    MATERIAL_MATCH_TAG,
 #endif
     /* The final value should be negative. */
     -1
@@ -151,6 +161,8 @@ which_output_format(const char *arg)
         { "elalg", ELALG},
         { "XLALG", XLALG},
         { "xlalg", XLALG},
+        { "XOLALG", XOLALG},
+        { "xolalg", XOLALG},
         { "uci", UCI},
         { "cm", CM},
         { "", SOURCE},
@@ -173,8 +185,11 @@ which_output_format(const char *arg)
              * a 6-piece suffix listing language-specific
              * letters to use in the output.
              */
-            if ((format == SAN || format == ELALG || format == XLALG) &&
-                    (strlen(arg) > format_prefix_len)) {
+            if ((format == SAN ||
+                 format == ELALG ||
+                 format == XLALG ||
+                 format == XOLALG) &&
+                (strlen(arg) > format_prefix_len)) {
                 set_output_piece_characters(&arg[format_prefix_len]);
             }
             return format;
@@ -200,6 +215,8 @@ output_file_suffix(OutputFormat format)
         case HALG:
         case ELALG:
         case XLALG:
+        case XOLALG:
+        case UCI:
             return PGN_suffix;
         case EPD:
             return EPD_suffix;
@@ -215,7 +232,10 @@ select_tag_string(TagName tag)
 {
     const char *tag_string;
 
-    if ((tag == PSEUDO_PLAYER_TAG) || (tag == PSEUDO_ELO_TAG) || (tag == PSEUDO_FEN_PATTERN_TAG)) {
+    if ((tag == PSEUDO_PLAYER_TAG) || 
+            (tag == PSEUDO_ELO_TAG) || 
+            (tag == PSEUDO_FEN_PATTERN_TAG) ||
+            (tag == PSEUDO_FEN_PATTERN_I_TAG)) {
         tag_string = NULL;
     }
     else {
@@ -321,18 +341,20 @@ show_tags(FILE *outfp, char **Tags, int tags_length)
             output_tag(tag, copy_of_tags, outfp);
             copy_of_tags[tag] = (char *) NULL;
         }
-        /* Handle the extra tags. */
-        for (tag_index = 0; tag_index < tags_length; tag_index++) {
-            if (copy_of_tags[tag_index] != NULL) {
-                output_tag(tag_index, copy_of_tags, outfp);
-            }
-        }
     }
     else {
         for (tag_index = 0; TagOrder[tag_index] >= 0; tag_index++) {
             TagName tag = TagOrder[tag_index];
             output_tag(tag, copy_of_tags, outfp);
             copy_of_tags[tag] = (char *) NULL;
+        }
+    }
+    /* Handle the remaining tags. */
+    if(!GlobalState.only_output_wanted_tags) {
+        for (tag_index = 0; tag_index < tags_length; tag_index++) {
+            if (copy_of_tags[tag_index] != NULL) {
+                output_tag(tag_index, copy_of_tags, outfp);
+            }
         }
     }
     (void) free(copy_of_tags);
@@ -354,7 +376,7 @@ check_line_length(FILE *fp, size_t len)
  * has been printed on.
  */
 static void
-single_char(FILE *fp, char ch)
+print_single_char(FILE *fp, char ch)
 {
     check_line_length(fp, 1);
     output_line[line_length] = ch;
@@ -369,7 +391,7 @@ print_separator(FILE *fp)
      * will be room for at least one more character after the space.
      */
     check_line_length(fp, 2);
-    if (line_length != 0) {
+    if (line_length != 0 && output_line[line_length - 1] != ' ') {
         output_line[line_length] = ' ';
         line_length++;
     }
@@ -414,6 +436,25 @@ print_str(FILE *fp, const char *str)
     }
 }
 
+/* Print the given str in separate space-separated
+ * pieces to take account of line-breaks.
+ * The str should not contain newline characters.
+ */
+static void
+print_space_separated_str(FILE *fp, const char *str)
+{
+    char *copy = copy_string(str);
+    const char *chunk = strtok(copy, " ");
+    while (chunk != NULL) {
+        print_str(fp, chunk);
+        chunk = strtok((char *) NULL, " ");
+        if(chunk != NULL) {
+            print_separator(fp);
+        }
+    }
+    (void) free((void *) copy);
+}
+
 static void
 print_comment_list(FILE *fp, CommentList *comment_list)
 {
@@ -424,28 +465,14 @@ print_comment_list(FILE *fp, CommentList *comment_list)
         StringList *comment = next_comment->comment;
 
         if (comment != NULL) {
-            /* We will use strtok to break up the comment string,
-             * with chunk to point to each bit in turn.
-             */
-            char *chunk;
-
-            single_char(fp, '{');
+            start_comment(fp);
             for (; comment != NULL; comment = comment->next) {
-                /* Make a copy because the string is altered. */
-                char *str = copy_string(comment->str);
-                chunk = strtok(str, " ");
-                while (chunk != NULL) {
+                print_space_separated_str(fp, comment->str);
+                if(comment->next != NULL) {
                     print_separator(fp);
-                    print_str(fp, chunk);
-                    chunk = strtok((char *) NULL, " ");
                 }
-                (void) free((void *) str);
             }
-            print_separator(fp);
-            single_char(fp, '}');
-            if (next_comment->next != NULL) {
-                print_separator(fp);
-            }
+            end_comment(fp);
         }
     }
 }
@@ -459,7 +486,7 @@ print_move_list(FILE *outputfile, unsigned move_number, Boolean white_to_move,
     Boolean keepPrinting;
     int plies;
     /* Keep track of the number of consecutive quiescent moves:
-     * captures, checks and promotion are non-quiescent.
+     * captures, Checks and promotion are non-quiescent.
      * @@@ NB: This does not strictly apply to just the main line
      * and could trigger quiescence in a variation, which is undesirable.
      */
@@ -479,6 +506,9 @@ print_move_list(FILE *outputfile, unsigned move_number, Boolean white_to_move,
     }
 
     while (move != NULL && keepPrinting) {
+        if (GlobalState.json_format) {
+            fputs("{ ", outputfile);
+        }
         /* Reset print_move number if a variation was printed. */
         print_move_number = print_move(outputfile, move_number,
                 print_move_number,
@@ -492,8 +522,22 @@ print_move_list(FILE *outputfile, unsigned move_number, Boolean white_to_move,
             if (GlobalState.output_FEN_string && 
                     GlobalState.FEN_comment_pattern == NULL &&
                     final_board != NULL) {
-                print_separator(outputfile);
-                print_str(outputfile, build_FEN_comment(final_board));
+                if(GlobalState.json_format) {
+                    if(!GlobalState.add_FEN_comments) {
+                        char *fen = get_FEN_string(final_board);
+                        fprintf(outputfile, ", \"FEN\" : \"%s\" ", fen);
+                        (void) free((void *) fen);
+                    }
+                    else {
+                        /* The final FEN position will have been output anyway. */
+                    }
+                }
+                else {
+                    print_separator(outputfile);
+                    const char *comment = build_FEN_comment(final_board);
+                    print_str(outputfile, comment);
+                    (void) free((void *) comment);
+                }
             }
             if (GlobalState.keep_results) {
                 print_separator(outputfile);
@@ -524,6 +568,9 @@ print_move_list(FILE *outputfile, unsigned move_number, Boolean white_to_move,
                 keepPrinting = FALSE;
             }
         }
+        if (GlobalState.json_format) {
+            fputs(" }", outputfile);
+        }
         move = move->next;
         /* The following is slightly inaccurate.
          * If the previous value of move was a comment and
@@ -534,7 +581,7 @@ print_move_list(FILE *outputfile, unsigned move_number, Boolean white_to_move,
          */
         if (move != NULL && keepPrinting) {
             if (GlobalState.json_format) {
-                fputs(",", outputfile);
+                fputs(", ", outputfile);
             }
             else {
                 print_separator(outputfile);
@@ -587,15 +634,10 @@ print_move(FILE *outputfile, unsigned move_number, Boolean print_move_number,
             /* Nothing to be output. */
         }
         else {
-            StringList *nags = move_details->Nags;
-            Variation *variants = move_details->Variants;
             const unsigned char *move_text = move_details->move;
             /* What move text to print. */
             char *move_to_print;
 
-            if (GlobalState.json_format) {
-                fputs("\"", outputfile);
-            }
             if (*move_text != '\0') {
                 if (GlobalState.keep_move_numbers &&
                         (white_to_move || print_move_number)) {
@@ -681,71 +723,85 @@ print_move(FILE *outputfile, unsigned move_number, Boolean print_move_number,
                     case LALG:
                     case ELALG:
                     case XLALG:
+                    case XOLALG:
+                    case UCI:
                     {
                         char algebraic[MAX_MOVE_LEN + 1];
                         size_t ind = 0;
 
-                        /* Prefix with a piece name if ELALG. */
-                        if ((output_format == ELALG || output_format == XLALG) &&
-                                move_details->class == PIECE_MOVE) {
-                            strcpy(algebraic,
-                                    piece_str(move_details->piece_to_move));
-                            ind = strlen(algebraic);
-                        }
-                        /* Format the basics. */
-                        if (move_details->class != NULL_MOVE) {
-                            sprintf(&algebraic[ind],
-                                    "%c%c",
-                                    move_details->from_col,
-                                    move_details->from_rank);
-                            ind += 2;
-                            if (output_format == XLALG) {
-                                /* Add a separating - or x. */
-                                char separator;
-                                if (move_details->captured_piece != EMPTY) {
-                                    separator = 'x';
-                                }
-                                else {
-                                    separator = '-';
-                                }
-                                sprintf(&algebraic[ind],
-                                        "%c", separator);
-                                ind++;
-                            }
-                            sprintf(&algebraic[ind],
-                                    "%c%c",
-                                    move_details->to_col,
-                                    move_details->to_rank);
-                            ind += 2;
+                        if(output_format == XOLALG &&
+                           (move_details->class == KINGSIDE_CASTLE ||
+                            move_details->class == QUEENSIDE_CASTLE)) {
+                            strcpy(algebraic, (char *) move_text);
+                            ind += strlen((char *) algebraic);
                         }
                         else {
-                            strcpy(algebraic, NULL_MOVE_STRING);
-                            ind += strlen(NULL_MOVE_STRING);
-                        }
-                        switch (move_details->class) {
-                            case PAWN_MOVE:
-                            case KINGSIDE_CASTLE:
-                            case QUEENSIDE_CASTLE:
-                            case PIECE_MOVE:
-                            case NULL_MOVE:
-                                /* Nothing more to do at this stage. */
-                                break;
-                            case ENPASSANT_PAWN_MOVE:
-                                if (output_format == ELALG) {
-                                    strcat(algebraic, "ep");
-                                    ind += 2;
-                                }
-                                break;
-                            case PAWN_MOVE_WITH_PROMOTION:
-                                sprintf(&algebraic[ind],
-                                        "%s",
-                                        piece_str(move_details->promoted_piece));
+                            /* Prefix with a piece name if ELALG. */
+                            if ((output_format == ELALG ||
+                                 output_format == XLALG ||
+                                 output_format == XOLALG) &&
+                                    move_details->class == PIECE_MOVE) {
+                                strcpy(algebraic,
+                                        piece_str(move_details->piece_to_move));
                                 ind = strlen(algebraic);
-                                break;
-                            case UNKNOWN_MOVE:
-                                strcpy(algebraic, "???");
-                                ind += 3;
-                                break;
+                            }
+                            /* Format the basics. */
+                            if (move_details->class != NULL_MOVE) {
+                                sprintf(&algebraic[ind],
+                                        "%c%c",
+                                        move_details->from_col,
+                                        move_details->from_rank);
+
+                                ind += 2;
+                                if (output_format == XLALG ||
+                                    output_format == XOLALG) {
+                                    /* Add a separating - or x. */
+                                    char separator;
+                                    if (move_details->captured_piece != EMPTY) {
+                                        separator = 'x';
+                                    }
+                                    else {
+                                        separator = '-';
+                                    }
+                                    sprintf(&algebraic[ind],
+                                            "%c", separator);
+                                    ind++;
+                                }
+                                sprintf(&algebraic[ind],
+                                        "%c%c",
+                                        move_details->to_col,
+                                        move_details->to_rank);
+                                ind += 2;
+                            }
+                            else {
+                                strcpy(algebraic, NULL_MOVE_STRING);
+                                ind += strlen(NULL_MOVE_STRING);
+                            }
+                            switch (move_details->class) {
+                                case PAWN_MOVE:
+                                case KINGSIDE_CASTLE:
+                                case QUEENSIDE_CASTLE:
+                                case PIECE_MOVE:
+                                case NULL_MOVE:
+                                    /* Nothing more to do at this stage. */
+                                    break;
+                                case ENPASSANT_PAWN_MOVE:
+                                    if (output_format == ELALG) {
+                                        strcat(algebraic, "ep");
+                                        ind += 2;
+                                    }
+                                    break;
+                                case PAWN_MOVE_WITH_PROMOTION:
+                                    sprintf(&algebraic[ind],
+                                            "%s",
+                                            piece_str(move_details->promoted_piece));
+                                    ind = strlen(algebraic);
+                                    break;
+                                case UNKNOWN_MOVE:
+                                    strcpy(algebraic, "???");
+                                    ind += 3;
+                                    break;
+                            }
                         }
                         if (GlobalState.keep_checks) {
                             switch (move_details->check_status) {
@@ -780,42 +836,144 @@ print_move(FILE *outputfile, unsigned move_number, Boolean print_move_number,
                 report_details(GlobalState.logfile);
                 move_to_print = NULL;
             }
-            if (move_to_print != NULL) {
-                if (GlobalState.json_format) {
+            if (GlobalState.json_format) {
+                fputs("\"move\" : ", outputfile);
+                fputs("\"", outputfile);
+                if (move_to_print != NULL) {
                     fputs(move_to_print, outputfile);
                 }
-                else {
-                    print_str(outputfile, move_to_print);
-                }
-                (void) free(move_to_print);
-            }
-            if (GlobalState.json_format) {
                 fputs("\"", outputfile);
             }
-            /* Print further information, that may be attached to moves
-             * and comments.
-             */
-            if (GlobalState.keep_NAGs) {
-                while (nags != NULL) {
-                    print_separator(outputfile);
-                    print_str(outputfile, nags->str);
-                    nags = nags->next;
-                }
-                /* We don't need to output move numbers after just
-                 * NAGs, so don't set something_printed.
-                 */
-            }
-            if (GlobalState.keep_comments) {
-                if (move_details->comment_list != NULL) {
-                    print_separator(outputfile);
-                    print_comment_list(outputfile, move_details->comment_list);
-                    something_printed = TRUE;
+            else {
+                if (move_to_print != NULL) {
+                    print_str(outputfile, move_to_print);
                 }
             }
-            if ((GlobalState.keep_variations) && (variants != NULL)) {
+            if (move_to_print != NULL) {
+                (void) free(move_to_print);
+            }
+            if(print_items_following_move(outputfile, move_details, move_number, white_to_move)) {
+                something_printed = TRUE;
+            }            
+        }
+    }
+    return something_printed;
+}
+
+/* Maximum length of a 64-bit unsigned int in decimal. 
+ * NB: At the moment, the output is hex, which requires
+ * only 16 characters.
+ */
+#define HASH_64_BIT_SPACE 20
+
+/* Print further information, that may be attached to moves,
+ * such as NAGs and comments.
+ * Return TRUE if something was printed for non JSON format output.
+ */
+static Boolean
+print_items_following_move(FILE *outputfile, const Move *move_details,
+        unsigned move_number, Boolean white_to_move)
+{
+    Boolean something_printed = FALSE;
+    Nag *nags = move_details->NAGs;
+    Variation *variants = move_details->Variants;
+    if (move_details->comment_list != NULL && GlobalState.keep_comments) {
+        print_comment_list(outputfile, move_details->comment_list);
+        something_printed = TRUE;
+    }
+    if(nags != NULL) {
+        /* We don't need to output move numbers after just
+         * NAGs, so don't set something_printed just for NAGs.
+         */
+        if (GlobalState.keep_NAGs && GlobalState.json_format) {
+            fputs(", \"nags\" : [", outputfile);
+        }
+        while (nags != NULL) {
+            if(GlobalState.keep_NAGs) {
+                StringList *text = nags->text;
+                while(text != NULL) {
+                    if(GlobalState.json_format) {
+                        fprintf(outputfile, "\"%s\"", text->str);
+                        if(nags->next != NULL) {
+                            fputs(", ", outputfile);
+                        }
+                    }
+                    else {
+                        print_separator(outputfile);
+                        print_str(outputfile, text->str);
+                    }
+                    text = text->next;
+                }
+            }
+            if(nags->comments != NULL && GlobalState.keep_comments) {
+                // @@@ JSON option needed.
+                
+                print_comment_list(outputfile, nags->comments);
+                something_printed = TRUE;
+            }
+            nags = nags->next;
+        }
+        if(GlobalState.keep_NAGs && GlobalState.json_format) {
+            fputs("] ", outputfile);
+        }
+    }
+    if (GlobalState.output_evaluation) {
+        if(GlobalState.json_format) {
+            fprintf(outputfile, ", \"evaluation\" : \"%.2f\"", 
+                    move_details->evaluation);
+        } 
+        else {
+            const char valueSpace[] = "-012456789.00";
+            char *evaluation = (char *) malloc_or_die(sizeof (valueSpace));
+            sprintf(evaluation, "%.2f", move_details->evaluation);
+            if (strlen(evaluation) > strlen(valueSpace)) {
+                fprintf(GlobalState.logfile,
+                        "Internal error: Overflow in evaluation space in print_items_following_move()\n");
+                exit(1);
+            }
+            
+            print_as_comment(outputfile, evaluation);
+            (void) free((void *) evaluation);
+            something_printed = TRUE;
+        }
+    }
+    if(GlobalState.add_FEN_comments) {
+        if(move_details->epd != NULL && move_details->fen_suffix != NULL) {
+            if(GlobalState.json_format) {
+                fprintf(outputfile, ", \"FEN\" : \"%s %s\"", 
+                        move_details->epd,
+                        move_details->fen_suffix);
+            }
+            else {
+                start_comment(outputfile);
+                print_space_separated_str(outputfile, move_details->epd);
+                print_separator(outputfile);
+                print_space_separated_str(outputfile, move_details->fen_suffix);
+                end_comment(outputfile);
+                something_printed = TRUE;
+            }
+        }
+    }
+    if (GlobalState.add_hashcode_comments) {
+        if(GlobalState.json_format) {
+            fprintf(outputfile, ", \"HashCode\" : \"%llx\"", 
+                    move_details->zobrist);
+        }
+        else {
+            char *hashcode = (char *) malloc_or_die(HASH_64_BIT_SPACE + 1);
+            sprintf(hashcode, "%llx", move_details->zobrist);
+            
+            print_as_comment(outputfile, hashcode);
+            (void) free((void *) hashcode);
+            something_printed = TRUE;
+        }
+    }
+    if (variants != NULL) {
+        if(GlobalState.keep_variations) {
+            if(!GlobalState.split_variants) {
                 while (variants != NULL) {
                     print_separator(outputfile);
-                    single_char(outputfile, '(');
+                    print_single_char(outputfile, '(');
                     if (GlobalState.keep_comments &&
                             (variants->prefix_comment != NULL)) {
                         print_comment_list(outputfile, variants->prefix_comment);
@@ -827,19 +985,74 @@ print_move(FILE *outputfile, unsigned move_number, Boolean print_move_number,
                     print_move_list(outputfile, move_number,
                             white_to_move, variants->moves,
                             (const Board *) NULL);
-                    single_char(outputfile, ')');
+                    print_single_char(outputfile, ')');
                     if (GlobalState.keep_comments &&
                             (variants->suffix_comment != NULL)) {
-                        print_separator(outputfile);
                         print_comment_list(outputfile, variants->suffix_comment);
                     }
                     variants = variants->next;
                 }
                 something_printed = TRUE;
             }
+            else {
+                /* Variations are being split so don't output them. */
+            }
+        }
+        else if(GlobalState.keep_comments) {
+            /* Avoid losing suffix comments of variations.
+             * NB: @@@ I am not entirely convinced that comments that
+             * follow variations actually belong with the move immediately
+             * preceding the variation. However, this is one way to avoid
+             * their being lost if variations are not being output.
+             */
+            while(variants != NULL) {
+                if(variants->suffix_comment != NULL) {
+                    print_comment_list(outputfile, variants->suffix_comment);
+                    something_printed = TRUE;
+                }
+                variants = variants->next;
+            }
         }
     }
     return something_printed;
+}
+
+/* Start a comment, taking into account separators
+ * and possible placement of comments on separate lines.
+ */
+static void
+start_comment(FILE *outputfile)
+{
+    if(GlobalState.separate_comment_lines) {
+        terminate_line(outputfile);
+    }
+    else {
+        print_separator(outputfile);
+    }
+    print_single_char(outputfile, '{');
+    print_separator(outputfile);
+}
+
+/* End a comment, taking into account separators
+ * and possible placement of comments on separate lines.
+ */
+static void
+end_comment(FILE *outputfile)
+{
+    print_separator(outputfile);
+    print_single_char(outputfile, '}');
+    if(GlobalState.separate_comment_lines) {
+        terminate_line(outputfile);
+    }
+}
+
+/* Print str as a comment. */
+static void
+print_as_comment(FILE *outputfile, const char *str)
+{
+    start_comment(outputfile);
+    print_str(outputfile, str);
+    end_comment(outputfile);
 }
 
 /* Return the letter associated with the given piece. */
@@ -933,9 +1146,9 @@ output_cm_result(const char *result, FILE *outputfile)
  */
 static void
 output_cm_game(FILE *outputfile, unsigned move_number,
-        Boolean white_to_move, const Game game)
+        Boolean white_to_move, const Game *game)
 {
-    const Move *move = game.moves;
+    const Move *move = game->moves;
 
     if ((move_number != 1) || (!white_to_move)) {
         fprintf(GlobalState.logfile,
@@ -943,14 +1156,14 @@ output_cm_game(FILE *outputfile, unsigned move_number,
         report_details(GlobalState.logfile);
     }
     fprintf(outputfile, "WHITE: %s\n",
-            game.tags[WHITE_TAG] != NULL ? game.tags[WHITE_TAG] : "");
+            game->tags[WHITE_TAG] != NULL ? game->tags[WHITE_TAG] : "");
     fprintf(outputfile, "BLACK: %s\n",
-            game.tags[BLACK_TAG] != NULL ? game.tags[BLACK_TAG] : "");
+            game->tags[BLACK_TAG] != NULL ? game->tags[BLACK_TAG] : "");
     putc('\n', outputfile);
 
-    if (game.prefix_comment != NULL) {
+    if (game->prefix_comment != NULL) {
         line_length = 0;
-        output_cm_comment(game.prefix_comment, outputfile, 0);
+        output_cm_comment(game->prefix_comment, outputfile, 0);
     }
     while (move != NULL) {
         if (move->move[0] != '\0') {
@@ -1027,43 +1240,44 @@ output_cm_game(FILE *outputfile, unsigned move_number,
 
 /* Output the current game according to the required output format. */
 void
-output_game(Game current_game, FILE *outputfile)
+format_game(Game *current_game, FILE *outputfile)
 {
     Boolean white_to_move = TRUE;
     unsigned move_number = 1;
+    Board *initial_board;
     /* The final board position, if available. */
     Board *final_board = NULL;
 
-    /* If we aren't starting from the initial setup, then we
-     * need to know the current move number and whose
-     * move it is.
-     */
-    if (current_game.tags[FEN_TAG] != NULL) {
-        Board *board = new_fen_board(current_game.tags[FEN_TAG]);
-
-        if (board != NULL) {
-            move_number = board->move_number;
-            white_to_move = board->to_move == WHITE;
-            (void) free((void *) board);
-        }
-    }
-
-    /* Start at the beginning of a line. */
-    line_length = 0;
-    
     /* We need a copy of the final board.
      * Combine the generation of this with a rewrite
      * of the moves of the game into
      * SAN (Standard Algebraic Notation) unless the original
      * source form is required.
      */
-    final_board = rewrite_game(&current_game);
+    final_board = rewrite_game(current_game);
+    initial_board = new_game_board(current_game->tags[FEN_TAG]);
+
+    /* If we aren't starting from the initial setup, then we
+     * need to know the current move number and whose
+     * move it is.
+     */
+    if (current_game->tags[FEN_TAG] != NULL && initial_board != NULL) {
+        move_number = initial_board->move_number;
+        white_to_move = initial_board->to_move == WHITE;
+    }
+
+    /* Start at the beginning of a line. */
+    line_length = 0;
+    
     if (final_board != NULL) {
-        if (GlobalState.output_total_plycount) {
-            add_total_plycount(&current_game, GlobalState.keep_variations);
+        if (GlobalState.output_plycount) {
+            add_plycount(current_game);
         }
-        if (GlobalState.add_hashcode_tag || current_game.tags[HASHCODE_TAG] != NULL) {
-            add_hashcode_tag(&current_game);
+        if (GlobalState.output_total_plycount) {
+            add_total_plycount(current_game, GlobalState.keep_variations);
+        }
+        if (GlobalState.add_hashcode_tag || current_game->tags[HASHCODE_TAG] != NULL) {
+            add_hashcode_tag(current_game);
         }
         switch (GlobalState.output_format) {
             case SAN:
@@ -1072,25 +1286,28 @@ output_game(Game current_game, FILE *outputfile)
             case HALG:
             case ELALG:
             case XLALG:
+            case XOLALG:
+            case UCI:
                 print_algebraic_game(current_game, outputfile, move_number, white_to_move,
                         final_board);
                 break;
             case EPD:
                 print_EPD_game(current_game, outputfile, move_number, white_to_move,
-                        final_board);
+                        initial_board);
                 break;
             case CM:
                 output_cm_game(outputfile, move_number, white_to_move, current_game);
                 break;
             default:
                 fprintf(GlobalState.logfile,
-                        "Internal error: unknown output type %d in output_game().\n",
+                        "Internal error: unknown output type %d in format_game().\n",
                         GlobalState.output_format);
                 break;
         }
         fflush(outputfile);
-        (void) free((void *) final_board);
+        free_board(final_board);
     }
+    free_board(initial_board);
 }
 
 /* Add the given tag to the output ordering. */
@@ -1129,13 +1346,18 @@ add_to_output_tag_order(TagName tag)
     }
 }
 
+/* Format EPD comments containing tag details.
+ * A c0 comment contains player and event info.
+ * A c1 comment contains the game result.
+ */
 static const char *
 format_epd_game_comment(char **Tags)
 {
-    static char comment_prefix[] = "c0 ";
+    static char c0_prefix[] = "c0 ";
+    static char c1_prefix[] = "c1 ";
     static char player_separator[] = "-";
     static size_t prefix_and_separator_len =
-            sizeof (comment_prefix) + sizeof (player_separator);
+            sizeof (c0_prefix) + sizeof (player_separator);
     size_t space_needed = prefix_and_separator_len;
     char *comment;
 
@@ -1155,12 +1377,24 @@ format_epd_game_comment(char **Tags)
     if (Tags[DATE_TAG] != NULL) {
         space_needed += 1 + strlen(Tags[DATE_TAG]);
     }
-    /* Allow for a terminating semicolon. */
+    /* Allow for a terminating semicolon after the c0 comment. */
+    space_needed++;
+
+    /* Allow for a space before the c1 comment. */
+    space_needed++;
+    space_needed += strlen(c1_prefix);
+    if(Tags[RESULT_TAG] != NULL) {
+        space_needed += 1 + strlen(Tags[RESULT_TAG]);
+    }
+    else {
+        space_needed += 1 + strlen("*");
+    }
+    /* Allow for a terminating semicolon after the c1 comment. */
     space_needed++;
 
     comment = (char *) malloc_or_die(space_needed + 1);
 
-    strcpy(comment, comment_prefix);
+    strcpy(comment, c0_prefix);
     if (Tags[WHITE_TAG] != NULL) {
         strcat(comment, Tags[WHITE_TAG]);
     }
@@ -1180,7 +1414,16 @@ format_epd_game_comment(char **Tags)
         strcat(comment, " ");
         strcat(comment, Tags[DATE_TAG]);
     }
+    strcat(comment, "; ");
+    strcat(comment, c1_prefix);
+    if(Tags[RESULT_TAG] != NULL) {
+        strcat(comment, Tags[RESULT_TAG]);
+    }
+    else {
+        strcat(comment, "*");
+    }
     strcat(comment, ";");
+
     if (strlen(comment) >= space_needed) {
         fprintf(GlobalState.logfile,
                 "Internal error: overflow in format_epd_game_comment\n");
@@ -1189,7 +1432,7 @@ format_epd_game_comment(char **Tags)
 }
 
 static void
-print_algebraic_game(Game current_game, FILE *outputfile,
+print_algebraic_game(Game *current_game, FILE *outputfile,
         unsigned move_number, Boolean white_to_move,
         Board *final_board)
 {
@@ -1210,27 +1453,28 @@ print_algebraic_game(Game current_game, FILE *outputfile,
     }
     /* Report details on the output. */
     if (GlobalState.tag_output_format == ALL_TAGS) {
-        show_tags(outputfile, current_game.tags, current_game.tags_length);
+        show_tags(outputfile, current_game->tags, current_game->tags_length);
     }
     else if (GlobalState.tag_output_format == SEVEN_TAG_ROSTER) {
-        output_STR(outputfile, current_game.tags);
+        output_STR(outputfile, current_game->tags);
         if (GlobalState.add_ECO && !GlobalState.parsing_ECO_file) {
             /* If ECO classification has been requested, then assume
              * that ECO tags are also required.
              */
-            output_tag(ECO_TAG, current_game.tags, outputfile);
-            output_tag(OPENING_TAG, current_game.tags, outputfile);
-            output_tag(VARIATION_TAG, current_game.tags, outputfile);
-            output_tag(SUB_VARIATION_TAG, current_game.tags, outputfile);
+            output_tag(ECO_TAG, current_game->tags, outputfile);
+            output_tag(OPENING_TAG, current_game->tags, outputfile);
+            output_tag(VARIATION_TAG, current_game->tags, outputfile);
+            output_tag(SUB_VARIATION_TAG, current_game->tags, outputfile);
         }
 
-        if(current_game.tags[FEN_TAG] != NULL) {
+        if(current_game->tags[FEN_TAG] != NULL) {
             /* Output any FEN that there might be. */
             /* @@@ NB: Strictly speaking, we should check TagOrder for the
              * preferred order of these, in case it is not the default.
              */
-            output_tag(SETUP_TAG, current_game.tags, outputfile);
-            output_tag(FEN_TAG, current_game.tags, outputfile);
+            output_tag(VARIANT_TAG, current_game->tags, outputfile);
+            output_tag(SETUP_TAG, current_game->tags, outputfile);
+            output_tag(FEN_TAG, current_game->tags, outputfile);
         }
         putc('\n', outputfile);
     }
@@ -1243,9 +1487,9 @@ print_algebraic_game(Game current_game, FILE *outputfile,
         exit(1);
     }
     if ((GlobalState.keep_comments) &&
-            (current_game.prefix_comment != NULL)) {
+            (current_game->prefix_comment != NULL)) {
         print_comment_list(outputfile,
-                current_game.prefix_comment);
+                current_game->prefix_comment);
         terminate_line(outputfile);
         putc('\n', outputfile);
     }
@@ -1253,15 +1497,15 @@ print_algebraic_game(Game current_game, FILE *outputfile,
         fputs("\"Moves\":[", outputfile);
     }
     print_move_list(outputfile, move_number, white_to_move,
-            current_game.moves, final_board);
+            current_game->moves, final_board);
     if (GlobalState.json_format) {
         fputs("]\n", outputfile);
     }
     /* Take account of a possible zero move game. */
-    if (current_game.moves == NULL) {
-        if (current_game.tags[RESULT_TAG] != NULL) {
+    if (current_game->moves == NULL) {
+        if (current_game->tags[RESULT_TAG] != NULL) {
             if (!GlobalState.json_format) {
-                fputs(current_game.tags[RESULT_TAG], outputfile);
+                print_str(outputfile, current_game->tags[RESULT_TAG]);
             }
         }
         else {
@@ -1279,63 +1523,58 @@ print_algebraic_game(Game current_game, FILE *outputfile,
 }
 
 static void
-print_EPD_move_list(Game current_game, FILE *outputfile,
+print_EPD_move_list(Game *current_game, FILE *outputfile,
         unsigned move_number, Boolean white_to_move,
-        Board *final_board)
+        Board *initial_board)
 {
-    const Move *move = current_game.moves;
-    const char *game_comment = format_epd_game_comment(current_game.tags);
-    static char epd[FEN_SPACE];
+    const char *game_comment = format_epd_game_comment(current_game->tags);
+    const Move *move = current_game->moves;
 
+    if (initial_board != NULL) {
+        char epd[FEN_SPACE];
+        build_basic_EPD_string(initial_board, epd);
+        fprintf(outputfile, "%s %s\n", epd, game_comment);
+    }
     while (move != NULL) {
         if (move->epd != NULL) {
-            fprintf(outputfile, "%s", move->epd);
+            fprintf(outputfile, "%s %s\n", move->epd, game_comment);
         }
         else {
             fprintf(GlobalState.logfile, "Internal error: Missing EPD\n");
+            report_details(GlobalState.logfile);
+            exit(1);
         }
-        fprintf(outputfile, " %s", game_comment);
-        putc('\n', outputfile);
         move = move->next;
-    }
-    if (final_board != NULL) {
-        build_basic_EPD_string(final_board, epd);
-        fprintf(outputfile, "%s %s", epd, game_comment);
-        putc('\n', outputfile);
     }
     (void) free((void *) game_comment);
 }
 
 static void
-print_EPD_game(Game current_game, FILE *outputfile,
+print_EPD_game(Game *current_game, FILE *outputfile,
         unsigned move_number, Boolean white_to_move,
-        Board *final_board)
+        Board *initial_board)
 {
     if (!GlobalState.check_only) {
         print_EPD_move_list(current_game, outputfile, move_number, white_to_move,
-                final_board);
+                initial_board);
         putc('\n', outputfile);
     }
 }
 
 /*
  * Build a comment containing a FEN representation of the board.
- * NB: This function re-uses static space each time it is called
- * so a later call will overwrite an earlier call.
  */
 static const char *
 build_FEN_comment(const Board *board)
 {
-    static char fen[FEN_SPACE];
-    strcpy(fen, "{ \"");
-    build_FEN_string(board, &fen[strlen(fen)]);
-    strcat(fen, "\" }");
-    /* A belated sanity check. */
-    if (strlen(fen) >= FEN_SPACE) {
-        fprintf(GlobalState.logfile,
-                "Internal error: string overflow in build_FEN_comment.\n");
-    }
-    return fen;
+    char *fen = get_FEN_string(board);
+    const char *prefix = "{ \"";
+    const char *suffix = "\" }";
+    
+    char *comment = (char *) malloc_or_die(strlen(prefix) + strlen(fen) + strlen(suffix) + 1);
+    sprintf(comment, "%s%s%s", prefix, fen, suffix);
+    (void) free((void *) fen);
+    return comment;
 }
 
 /*
@@ -1370,17 +1609,30 @@ static unsigned count_move_list_ply(Move *move_list, Boolean count_variations)
     return count;
 }
 
-/* A small size for formatted move numbers. */
-#define FORMATTED_MOVE_COUNT_SIZE (20)
+/*
+ * Count how many plies in the game in total.
+ * Include variations if count_variations.
+ */
+void add_plycount(const Game *game)
+{
+    unsigned count = count_move_list_ply(game->moves, FALSE);
+    char formatted_count[FORMATTED_NUMBER_SIZE];
+    sprintf(formatted_count, "%u", count);
+
+    if (game->tags[PLY_COUNT_TAG] != NULL) {
+        (void) free(game->tags[PLY_COUNT_TAG]);
+    }
+    game->tags[PLY_COUNT_TAG] = copy_string(formatted_count);
+}
 
 /*
  * Count how many plies in the game in total.
  * Include variations if count_variations.
  */
-static void add_total_plycount(const Game *game, Boolean count_variations)
+void add_total_plycount(const Game *game, Boolean count_variations)
 {
     unsigned count = count_move_list_ply(game->moves, count_variations);
-    char formatted_count[FORMATTED_MOVE_COUNT_SIZE];
+    char formatted_count[FORMATTED_NUMBER_SIZE];
     sprintf(formatted_count, "%u", count);
 
     if (game->tags[TOTAL_PLY_COUNT_TAG] != NULL) {
@@ -1396,7 +1648,7 @@ static void add_total_plycount(const Game *game, Boolean count_variations)
 static void add_hashcode_tag(const Game *game)
 {
     HashCode hashcode = game->cumulative_hash_value;
-    char formatted_code[FORMATTED_MOVE_COUNT_SIZE];
+    char formatted_code[FORMATTED_NUMBER_SIZE];
     sprintf(formatted_code, "%08x", (unsigned) hashcode);
 
     if (game->tags[HASHCODE_TAG] != NULL) {

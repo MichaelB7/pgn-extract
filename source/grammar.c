@@ -1,24 +1,24 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +48,9 @@ static TokenType current_symbol = NO_TOKEN;
  */
 static unsigned RAV_level = 0;
 
+/* How often to report processing rate. */
+static unsigned PROGRESS_RATE = 1000;
+
 /* Retain details of the header of a game.
  * This comprises the Tags and any comment prefixing the
  * moves of the game.
@@ -69,7 +72,7 @@ static Move *parse_move(void);
 static Move *parse_move_unit(void);
 static CommentList *parse_opt_comment_list(void);
 Boolean parse_opt_move_number(void);
-static StringList *parse_opt_NAG_list(void);
+static void parse_opt_NAG_list(Move *move_details);
 static Variation *parse_opt_variant_list(void);
 static Variation *parse_variant(void);
 static char *parse_result(void);
@@ -77,10 +80,13 @@ static char *parse_result(void);
 static void setup_for_new_game(void);
 void free_tags(void);
 static void check_result(char **Tags, const char *terminating_result);
-static void free_comment_list(CommentList *comment_list);
 static void deal_with_ECO_line(Move *move_list);
 static void deal_with_game(Move *move_list);
 static Boolean finished_processing(void);
+static void output_game(Game *game,FILE *outputfile);
+static void split_variants(Game *game, FILE *outputfile, unsigned depth);
+static Boolean chess960_setup(Board *board);
+static CommentList *append_comment(CommentList *item, CommentList *list);
 
 /* Initialise the game header structure to contain
  * space for the default number of tags.
@@ -185,17 +191,8 @@ check_result(char **Tags, const char *terminating_result)
             result_tag = copy_string(terminating_result);
             Tags[RESULT_TAG] = result_tag;
         }
-        else if ((result_tag != NULL) &&
-                (strcmp(terminating_result, "*") != 0) &&
-                (strcmp(result_tag, terminating_result) != 0)) {
-            print_error_context(GlobalState.logfile);
-            fprintf(GlobalState.logfile,
-                    "Inconsistent result strings %s vs %s in the following game.\n", 
-                    result_tag, terminating_result);
-            report_details(GlobalState.logfile);
-        }
         else {
-            /* Ok. */
+            /* Consistency checks done later. */
         }
     }
 }
@@ -306,6 +303,9 @@ parse_opt_game_list(SourceFileType file_type)
         move_list = NULL;
         setup_for_new_game();
     }
+    if(move_list != NULL) {
+        free_move_list(move_list);
+    }
 }
 
 /* Parse a game and return a pointer to any valid list of moves
@@ -356,7 +356,7 @@ parse_game(Move **returned_move_list)
             last_move = last_move->next;
         }
         if (hanging_comment != NULL) {
-            append_comments_to_move(last_move, hanging_comment);
+            last_move->comment_list = append_comment(hanging_comment, last_move->comment_list);
         }
         if (result != NULL) {
             /* Append it to the last move. */
@@ -399,37 +399,74 @@ parse_opt_tag_list(void)
     while (parse_tag()) {
         something_found = TRUE;
     }
-    if (something_found) {
-        /* Perform any consistency checks. */
-        if ((GameHeader.Tags[SETUP_TAG] != NULL) &&
-                (strcmp(GameHeader.Tags[SETUP_TAG], "1") == 0)) {
-            /* There must be a FEN_TAG to go with it. */
-            if (GameHeader.Tags[FEN_TAG] == NULL) {
-                fprintf(GlobalState.logfile,
-                        "Missing %s Tag to accompany %s Tag.\n",
-                        tag_header_string(FEN_TAG),
-                        tag_header_string(SETUP_TAG));
-                print_error_context(GlobalState.logfile);
-            }
-        }
-        else if(GameHeader.Tags[FEN_TAG] != NULL) {
-            /* There must be a SETUP_TAG to go with it. */
-            if(GameHeader.Tags[SETUP_TAG] == NULL) {
-                fprintf(GlobalState.logfile,
-                        "Missing %s Tag to accompany %s Tag.\n",
-                        tag_header_string(SETUP_TAG),
-                        tag_header_string(FEN_TAG));
-                print_error_context(GlobalState.logfile);
-                GameHeader.Tags[SETUP_TAG] = copy_string("1");
-            }
-        }
-    }
     prefix_comment = parse_opt_comment_list();
     if (prefix_comment != NULL) {
         GameHeader.prefix_comment = prefix_comment;
         something_found = TRUE;
     }
     return something_found;
+}
+
+/* Return TRUE if it looks like board contains an initial
+ * Chess 960 setup position. FALSE otherwise.
+ * Assessment requires that:
+ *     + The move number be 1.
+ *     + All castling rights are intact.
+ *     + The two home ranks are full.
+ *     + Identical pieces are opposite each other on the back rank.
+ *     + At least one piece is out of its standard position.
+ */
+static Boolean
+chess960_setup(Board *board)
+{
+    if(board->move_number == 1 &&
+       board->WKingRank == '1' &&
+       board->BKingRank == '8' &&
+       board->WKingCol == board->BKingCol &&
+       (board->WKingCastle != '\0' &&
+        board->WQueenCastle != '\0' &&
+        board->BKingCastle != '\0' &&
+        board->BQueenCastle != '\0')) {
+        /* Check for a full set of pawns. */
+        Boolean probable = TRUE;
+        int white_r = RankConvert('2');
+        int black_r = RankConvert('7');
+        Piece white_pawn = MAKE_COLOURED_PIECE(WHITE, PAWN);
+        Piece black_pawn = MAKE_COLOURED_PIECE(BLACK, PAWN);
+        for(int c = ColConvert('a'); c <= ColConvert('h') && probable; c++) {
+            probable = board->board[white_r][c] == white_pawn &&
+                       board->board[black_r][c] == black_pawn;
+            /* Make sure the back rank is full and identical pieces
+             * are opposite each other.
+             */
+            if(probable) {
+                probable =
+                    board->board[white_r-1][c] != EMPTY &&
+                    EXTRACT_PIECE(board->board[white_r-1][c]) ==
+                        EXTRACT_PIECE(board->board[black_r+1][c]);
+            }
+        }
+        if(probable) {
+            /* Check for at least one piece type being out of position. */
+            /* Only need to check one colour because we already know the
+             * pieces are identically paired.
+             */
+            white_r = RankConvert('1');
+            probable =
+                board->board[white_r][ColConvert('a')] != W(ROOK) ||
+                board->board[white_r][ColConvert('b')] != W(KNIGHT) ||
+                board->board[white_r][ColConvert('c')] != W(BISHOP) ||
+                board->board[white_r][ColConvert('d')] != W(QUEEN) ||
+                board->board[white_r][ColConvert('e')] != W(KING) ||
+                board->board[white_r][ColConvert('f')] != W(BISHOP) ||
+                board->board[white_r][ColConvert('g')] != W(KNIGHT) ||
+                board->board[white_r][ColConvert('h')] != W(ROOK);
+        }
+        return probable;
+    }
+    else {
+        return FALSE;
+    }
 }
 
 Boolean
@@ -503,7 +540,7 @@ parse_move_and_variants(void)
         move_details->Variants = parse_opt_variant_list();
         comment = parse_opt_comment_list();
         if (comment != NULL) {
-            append_comments_to_move(move_details, comment);
+            move_details->comment_list = append_comment(comment, move_details->comment_list);
         }
     }
     return move_details;
@@ -519,13 +556,10 @@ parse_move(void)
     /* @@@ Watch out for finding just the number. */
     move_details = parse_move_unit();
     if (move_details != NULL) {
-        CommentList *comment;
-
-        move_details->Nags = parse_opt_NAG_list();
-        comment = parse_opt_comment_list();
-        if (comment != NULL) {
-            append_comments_to_move(move_details, comment);
-        }
+        parse_opt_NAG_list(move_details);
+        /* Any trailing comments will have been picked up
+         * and attached to the NAGs.
+         */
     }
     return move_details;
 }
@@ -539,8 +573,10 @@ parse_move_unit(void)
         move_details = yylval.move_details;
 
         if (move_details->class == NULL_MOVE && RAV_level == 0) {
-            print_error_context(GlobalState.logfile);
-            fprintf(GlobalState.logfile, "Null moves (--) only allowed in variations.\n");
+            if(!GlobalState.allow_null_moves) {
+                print_error_context(GlobalState.logfile);
+                fprintf(GlobalState.logfile, "Null moves (--) only allowed in variations.\n");
+            }
         }
 
         current_symbol = next_token();
@@ -587,21 +623,34 @@ parse_opt_move_number(void)
     return something_found;
 }
 
-static StringList *
-parse_opt_NAG_list(void)
+/**
+ * Parse 0 or more NAGs, optionally followed by 0 or more comments.
+ * @param move_details
+ */
+static void
+parse_opt_NAG_list(Move *move_details)
 {
-    StringList *nags = NULL;
-
     while (current_symbol == NAG) {
-        if (GlobalState.keep_NAGs) {
-            nags = save_string_list_item(nags, yylval.token_string);
+        Nag *details = (Nag *) malloc_or_die(sizeof(*details));
+        details->text = NULL;
+        details->comments = NULL;
+        details->next = NULL;
+        do {
+            details->text = save_string_list_item(details->text, yylval.token_string);
+            current_symbol = next_token();
+        } while(current_symbol == NAG);
+        details->comments = parse_opt_comment_list();
+        if(move_details->NAGs == NULL) {
+            move_details->NAGs = details;
         }
         else {
-            (void) free((void *) yylval.token_string);
+            Nag *nextNAG = move_details->NAGs;
+            while(nextNAG->next != NULL) {
+                nextNAG = nextNAG->next;
+            }
+            nextNAG->next = details;
         }
-        current_symbol = next_token();
     }
-    return nags;
 }
 
 static Variation *
@@ -634,7 +683,7 @@ parse_variant(void)
         Move *moves;
 
         RAV_level++;
-        variation = malloc_or_die(sizeof (Variation));
+        variation = (Variation *) malloc_or_die(sizeof (Variation));
 
         current_symbol = next_token();
         prefix_comment = parse_opt_comment_list();
@@ -662,7 +711,7 @@ parse_variant(void)
              */
             trailing_comment = parse_opt_comment_list();
             if (trailing_comment != NULL) {
-                append_comments_to_move(last_move, trailing_comment);
+                last_move->comment_list = append_comment(trailing_comment, last_move->comment_list);
             }
         }
         else {
@@ -677,8 +726,6 @@ parse_variant(void)
             print_error_context(GlobalState.logfile);
         }
         suffix_comment = parse_opt_comment_list();
-        if (suffix_comment != NULL) {
-        }
         variation->prefix_comment = prefix_comment;
         variation->suffix_comment = suffix_comment;
         variation->moves = moves;
@@ -744,7 +791,7 @@ free_string_list(StringList *list)
     }
 }
 
-static void
+void
 free_comment_list(CommentList *comment_list)
 {
     while (comment_list != NULL) {
@@ -773,36 +820,48 @@ free_variation(Variation *variation)
             free_comment_list(next->suffix_comment);
         }
         if (next->moves != NULL) {
-            (void) free_move_list((void *) next->moves);
+            (void) free_move_list(next->moves);
         }
         (void) free((void *) next);
+    }
+}
+
+static void free_NAG_list(Nag *nag_list)
+{
+    while(nag_list != NULL) {
+        Nag *nextNAG = nag_list->next;
+        free_string_list(nag_list->text);
+        free_comment_list(nag_list->comments);
+        (void) free((void *) nag_list);
+        nag_list = nextNAG;
     }
 }
 
 void
 free_move_list(Move *move_list)
 {
-    Move *next;
+    Move *nextMove;
 
     while (move_list != NULL) {
-        next = move_list;
+        nextMove = move_list;
         move_list = move_list->next;
-        if (next->Nags != NULL) {
-            free_string_list(next->Nags);
+        
+        free_NAG_list(nextMove->NAGs);
+        free_comment_list(nextMove->comment_list);
+        free_variation(nextMove->Variants);
+        
+        if (nextMove->epd != NULL) {
+            (void) free((void *) nextMove->epd);
         }
-        if (next->comment_list != NULL) {
-            free_comment_list(next->comment_list);
+        if(nextMove->fen_suffix != NULL) {
+            (void) free((void *) nextMove->fen_suffix);
+            nextMove->fen_suffix = NULL;
         }
-        if (next->Variants != NULL) {
-            free_variation(next->Variants);
+        if (nextMove->terminating_result != NULL) {
+            (void) free((void *) nextMove->terminating_result);
         }
-        if (next->epd != NULL) {
-            (void) free((void *) next->epd);
-        }
-        if (next->terminating_result != NULL) {
-            (void) free((void *) next->terminating_result);
-        }
-        (void) free((void *) next);
+        
+        (void) free((void *) nextMove);
     }
 }
 
@@ -812,7 +871,7 @@ free_move_list(Move *move_list)
 StringList *
 save_string_list_item(StringList *list, const char *str)
 {
-    if (str != NULL) {
+    if (str != NULL && *str != '\0') {
         StringList *new_item;
 
         new_item = (StringList *) malloc_or_die(sizeof (*new_item));
@@ -830,6 +889,16 @@ save_string_list_item(StringList *list, const char *str)
             tail->next = new_item;
         }
     }
+#if 1
+    /* This is almost certainly correct to avoid losing
+     * two bytes with malloc'd empty strings.
+     * No problems with valgrind but just being
+     * cautious.
+     */
+    else if(str != NULL) {
+        (void) free((void *) str);
+    }
+#endif
     return list;
 }
 
@@ -837,36 +906,100 @@ save_string_list_item(StringList *list, const char *str)
  * any associated with move.
  */
 void
-append_comments_to_move(Move *move, CommentList *Comment)
+append_comments_to_move(Move *move, CommentList *comment)
 {
-    if (Comment != NULL) {
-        /* Add in to the end of any already existing. */
-        if (move->comment_list == NULL) {
-            move->comment_list = Comment;
-        }
-        else {
-            /* Add in the final comment to 
-             * the end of any existing for this move.
-             */
-            CommentList *tail = move->comment_list;
+    if (comment != NULL) {
+        move->comment_list = append_comment(comment, move->comment_list);
+    }
+}
 
-            while (tail->next != NULL) {
-                tail = tail->next;
-            }
-            tail->next = Comment;
+/* Add item to the end of list.
+ * If list is empty, return item.
+ */
+static CommentList *append_comment(CommentList *item, CommentList *list)
+{
+    if (list == NULL) {
+        return item;
+    }
+    else {
+        CommentList *tail = list;
+
+        while (tail->next != NULL) {
+            tail = tail->next;
+        }
+        tail->next = item;
+        return list;
+    }
+}
+
+/* Check for consistency of any FEN-related tags. */
+static Boolean consistent_FEN_tags(Game *current_game)
+{
+    Boolean consistent = TRUE;
+
+    if ((current_game->tags[SETUP_TAG] != NULL) &&
+            (strcmp(current_game->tags[SETUP_TAG], "1") == 0)) {
+        /* There must be a FEN_TAG to go with it. */
+        if (current_game->tags[FEN_TAG] == NULL) {
+            consistent = FALSE;
+            report_details(GlobalState.logfile);
+            fprintf(GlobalState.logfile,
+                    "Missing %s Tag to accompany %s Tag.\n",
+                    tag_header_string(FEN_TAG),
+                    tag_header_string(SETUP_TAG));
+            print_error_context(GlobalState.logfile);
         }
     }
+    if(current_game->tags[FEN_TAG] != NULL) {
+        Board *board = new_fen_board(current_game->tags[FEN_TAG]);
+        if(board != NULL) {
+            /* There must be a SETUP_TAG to go with it. */
+            if(current_game->tags[SETUP_TAG] == NULL) {
+                // This is such a common problem that it makes
+                // more sense just to silently correct it.
+#if 0
+                report_details(GlobalState.logfile);
+                fprintf(GlobalState.logfile,
+                        "Missing %s Tag to accompany %s Tag.\n",
+                        tag_header_string(SETUP_TAG),
+                        tag_header_string(FEN_TAG));
+                print_error_context(GlobalState.logfile);
+#endif
+                /* Fix the inconsistency. */
+                current_game->tags[SETUP_TAG] = copy_string("1");
+            }
+
+            Boolean chess960 = chess960_setup(board);
+            if(current_game->tags[VARIANT_TAG] == NULL) {
+                /* See if there should be a Variant tag. */
+                /* Look for an initial position found in Chess 960. */
+                if(chess960) {
+                    report_details(GlobalState.logfile);
+                    fprintf(GlobalState.logfile,
+                            "Missing %s Tag for non-standard setup; adding %s.\n",
+                            tag_header_string(VARIANT_TAG),
+                            current_game->tags[VARIANT_TAG]);
+                    /* Fix the inconsistency. */
+                    current_game->tags[VARIANT_TAG] = copy_string("chess 960");
+                }
+            }
+            else if(chess960) {
+                /* @@@ Should really make sure the Variant tag is appropriate. */
+            }
+
+            free_board(board);
+        }
+        else {
+            consistent = FALSE;
+        }
+    }
+    return consistent;
 }
 
 static void
 deal_with_game(Move *move_list)
 {
     Game current_game;
-    /* Record whether the game has been printed or not.
-     * This is used for the case of the -n flag which catches
-     * all non-printed games.
-     */
-    Boolean game_output = FALSE;
     /* We need a dummy argument for apply_move_list. */
     unsigned plycount;
     /* Whether the game matches, as long as it is not in a CHECKFILE. */
@@ -900,7 +1033,7 @@ deal_with_game(Move *move_list)
      * previous_occurrence function.
      *
      * If there are any tag criteria, it will be easy to quickly
-     * eliminate most games without going through the length
+     * eliminate most games without going through the lengthy
      * process of game matching.
      *
      * If ECO adding is done, the order of checking may cause
@@ -909,15 +1042,16 @@ deal_with_game(Move *move_list)
      * Therefore, Check for the ECO tag only after everything else has
      * been checked.
      */
-    if (check_tag_details_not_ECO(current_game.tags, current_game.tags_length) &&
-            check_setup_tag(current_game.tags) &&
-            apply_move_list(&current_game, &plycount, GlobalState.depth_of_positional_search) &&
-            check_move_bounds(plycount) &&
-            check_textual_variations(current_game) &&
-            check_for_ending(current_game.moves) &&
-            check_for_only_checkmate(&current_game) &&
-            check_for_only_repetition(current_game.position_counts) &&
-            check_ECO_tag(current_game.tags)) {
+    if (consistent_FEN_tags(&current_game) &&
+        check_tag_details_not_ECO(current_game.tags, current_game.tags_length) &&
+        check_setup_tag(current_game.tags) &&
+        apply_move_list(&current_game, &plycount, GlobalState.depth_of_positional_search) &&
+        check_move_bounds(plycount) &&
+        check_textual_variations(&current_game) &&
+        check_for_ending(&current_game) &&
+        check_for_only_checkmate(&current_game) &&
+        check_for_only_repetition(current_game.position_counts) &&
+        check_ECO_tag(current_game.tags)) {
         /* If there is no original filename then the game is not a
          * duplicate.
          */
@@ -968,24 +1102,27 @@ deal_with_game(Move *move_list)
                     outputfile = GlobalState.duplicate_file;
                     if ((last_input_file != GlobalState.current_input_file) &&
                             (GlobalState.current_input_file != NULL)) {
-                        /* Record which file this and succeeding
-                         * duplicates come from.
-                         */
-                        print_str(outputfile, "{ From: ");
-                        print_str(outputfile,
-                                GlobalState.current_input_file);
-                        print_str(outputfile, " }");
-                        terminate_line(outputfile);
+                        if(GlobalState.keep_comments) {
+                            /* Record which file this and succeeding
+                             * duplicates come from.
+                             */
+                            print_str(outputfile, "{ From: ");
+                            print_str(outputfile,
+                                    GlobalState.current_input_file);
+                            print_str(outputfile, " }");
+                            terminate_line(outputfile);
+                        }
                         last_input_file = GlobalState.current_input_file;
                     }
-                    print_str(outputfile, "{ First found in: ");
-                    print_str(outputfile, original_filename);
-                    print_str(outputfile, " }");
-                    terminate_line(outputfile);
+                    if(GlobalState.keep_comments) {
+                        print_str(outputfile, "{ First found in: ");
+                        print_str(outputfile, original_filename);
+                        print_str(outputfile, " }");
+                        terminate_line(outputfile);
+                    }
                 }
                 /* Now output what we have. */
-                output_game(current_game, outputfile);
-                game_output = TRUE;
+                output_game(&current_game, outputfile);
                 if (GlobalState.verbosity > 1) {
                     /* Report progress on logfile. */
                     report_details(GlobalState.logfile);
@@ -1003,7 +1140,7 @@ deal_with_game(Move *move_list)
             (void) apply_move_list(&current_game, &plycount, 0);
         }
         if (current_game.moves_ok || GlobalState.keep_broken_games) {
-            output_game(current_game, GlobalState.non_matching_file);
+            output_game(&current_game, GlobalState.non_matching_file);
         }
     }
     if (game_matches && GlobalState.matching_game_numbers != NULL &&
@@ -1029,8 +1166,140 @@ deal_with_game(Move *move_list)
         free_position_count_list(current_game.position_counts);
         current_game.position_counts = NULL;
     }
-    if (GlobalState.verbosity != 0 && (GlobalState.num_games_processed % 10) == 0) {
+    if (GlobalState.verbosity != 0 && (GlobalState.num_games_processed % PROGRESS_RATE) == 0) {
         fprintf(stderr, "Games: %lu\r", GlobalState.num_games_processed);
+    }
+}
+
+/*
+ * Output the given game to the output file.
+ * If GlobalState.split_variants then this will involve outputting 
+ * each variation separately.
+ */
+static void
+output_game(Game *game, FILE *outputfile)
+{
+    if(GlobalState.split_variants && GlobalState.keep_variations) {
+        split_variants(game, outputfile, 0);
+    }
+    else {
+        format_game(game, outputfile);
+    }
+}
+
+/*
+ * Output each variation separately, to the required depth.
+ * NB: This involves the removal of all variations from the game.
+ * This is done recursively and depth (>=0) defines the current
+ * level of recursion.
+ */
+static void
+split_variants(Game *game, FILE *outputfile, unsigned depth)
+{
+    /* Gather all the suffix comments at this level. */
+    Move *move = game->moves;
+    while(move != NULL) {
+        Variation *variants = move->Variants;
+        while (variants != NULL) {
+            if(variants->suffix_comment != NULL) {
+                move->comment_list = append_comment(variants->suffix_comment, move->comment_list);
+                variants->suffix_comment = NULL;
+            }
+            variants = variants->next;
+        }
+        move = move->next;
+    }
+
+    /* Format the main line at this level. */
+    format_game(game, outputfile);
+
+    if(GlobalState.split_depth_limit == 0 ||
+           GlobalState.split_depth_limit > depth) {
+        /* Now all the variations. */
+        char *result_tag = game->tags[RESULT_TAG];
+        game->tags[RESULT_TAG] = copy_string("*");
+        move = game->moves;
+        Move *prev = NULL;
+        while(move != NULL) {
+            Variation *variants = move->Variants;
+            while (variants != NULL) {
+                Variation *next_variant = variants->next;
+                Move *variant_moves = variants->moves;
+                if(variant_moves != NULL) {
+                    /* Supply a result if it is missing. */
+                    Move *last_move = variant_moves;
+                    while(last_move->next != NULL) {
+                        last_move = last_move->next;
+                    }
+                    if(last_move->terminating_result == NULL) {
+                        last_move->terminating_result = copy_string("*");
+                    }
+                    /* Replace the main line with the variants. */
+                    if(prev != NULL) {
+                        prev->next = variant_moves;
+                    }
+                    else {
+                        game->moves = variant_moves;
+                    }
+                    /* Detach following variations. */
+                    variants->next = NULL;
+                    CommentList *prefix_comment = variants->prefix_comment;
+                    if(prefix_comment != NULL) {
+                        if(prev != NULL) {
+                            prev->comment_list = append_comment(prefix_comment, prev->comment_list);
+                        }
+                        else {
+                            game->prefix_comment = append_comment(prefix_comment,
+                                                                  game->prefix_comment);
+                        }
+                    }
+                    split_variants(game, outputfile, depth+1);
+                    if(prefix_comment != NULL) {
+                        /* Remove the appended comments. */
+                        CommentList *list;
+                        if(prev != NULL) {
+                            list  = prev->comment_list;
+                        }
+                        else {
+                            list = game->prefix_comment;
+                        }
+                        if(list == prefix_comment) {
+                            if(prev != NULL) {
+                                prev->comment_list = NULL;
+                            }
+                            else {
+                                game->prefix_comment = NULL;
+                            }
+                        }
+                        else {
+                            while(list->next != prefix_comment && list->next != NULL) {
+                                list = list->next;
+                            }
+                            list->next = NULL;
+                        }
+                    }
+                    variants->next = next_variant;
+                }
+                variants = next_variant;
+            }
+            if(move->Variants != NULL) {
+                /* The variation can now be disposed of. */
+                free_variation(move->Variants);
+                move->Variants = NULL;
+                /* Restore the move replaced by its variants. */
+                if(prev != NULL) {
+                    prev->next = move;
+                }
+                else {
+                    game->moves = move;
+                }
+            }
+            prev = move;
+            move = move->next;
+        }
+        /* Put everything back as it was. */
+        (void) free((void *) game->tags[RESULT_TAG]);
+        game->tags[RESULT_TAG] = result_tag;
     }
 }
 

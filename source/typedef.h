@@ -1,6 +1,6 @@
 /*
  *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
+ *  Copyright (C) 1994-2019 David Barnes
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 1, or (at your option)
@@ -34,12 +34,13 @@
      *     XLALG: Enhanced long-algebraic. Includes piece names, e.g. Ng1f3,
      *            en-passant notation and either - or x between squares for
      *            non-capture and capture moves respectively.
+     *     XOLALG: As XLALG but with O-O and O-O-O for castling moves.
      *     UCI: UCI-compatible format - actually LALG.
      */
 #ifndef TYPEDEF_H
 #define TYPEDEF_H
 
-typedef enum { SOURCE, SAN, EPD, CM, LALG, HALG, ELALG, XLALG, UCI } OutputFormat;
+typedef enum { SOURCE, SAN, EPD, CM, LALG, HALG, ELALG, XLALG, XOLALG, UCI } OutputFormat;
 
     /* Define a type to specify whether a move gives check, checkmate,
      * or nocheck.
@@ -56,20 +57,32 @@ typedef struct string_list {
     struct string_list *next;
 } StringList;
 
-/* The following function is used for linking list items together. */
-StringList *save_string_list_item(StringList *list,const char *str);
-
-typedef struct comment_list{
+typedef struct comment_list {
     StringList *comment;
     struct comment_list *next;
 } CommentList;
 
-typedef struct variation{
+typedef struct variation {
     CommentList *prefix_comment;
     struct move *moves;
+    /* The role of a suffix_comment is not entirely clear.
+     * It is a comment that immediately follows a variation
+     * so its role could either be a comment on the variation,
+     * a preceding comment for the first move following the variation or
+     * a following comment for the move immediately preceding the variation.
+     *
+     * NB: @@@ With both -V and --splitvariants, suffix_comments are output
+     * following the move immediately preceding the variation.
+     */
     CommentList *suffix_comment;
     struct variation *next;
 } Variation;
+
+typedef struct nag {
+    StringList *text;
+    CommentList *comments;
+    struct nag *next; 
+} Nag;
 
 /* Define a maximum length for the text of moves.
  * This is generous.
@@ -80,7 +93,7 @@ typedef struct variation{
          * NAGs and comments.
          */
 typedef struct move {
-    /* @@@ This array is of type unsigned char,
+    /* This array is of type unsigned char,
      * in order to accommodate full 8-bit letters without
      * sign extension.
      */
@@ -98,18 +111,32 @@ typedef struct move {
     Piece promoted_piece;
     /* Whether this move gives check. */
     CheckStatus check_status;
-    /* An EPD representation of the board immediately after this move
+    /* An EPD representation of the board immediately before this move
      * has been played.
      */
     char *epd;
-    StringList *Nags;
+    /* The move count additions to the EPD representation to complete
+     * a FEN description. Only relevant if (epd != NULL).
+     */
+    char *fen_suffix;
+    /* zobrist hash code of the position after this move has been played.
+     * Only set if GlobalState.add_hashcode_comments. 
+     */
+    uint64_t zobrist;
+    /* Evaluation of the position after this move has been played.
+     * This is primarily a hook for anyone wanting to build a proper
+     * evaluation function (see apply.c) or interface to an external
+     * engine, say.
+     */
+    double evaluation;
+    Nag *NAGs;
     CommentList *comment_list;
-    /* terminating_result hold the result of the current list of moves. */
+    /* terminating_result holds the result of the current list of moves. */
     char *terminating_result;
     Variation *Variants;
     /* Pointers to the previous and next move.
-     * The extraction program does not need the prev field, but my
-     * intention is to build other interfaces that might need it.
+     * The extraction program does not need the prev field, but
+     * interfaces that might need it.
      * For instance, a game viewer would need to be able to move backwards
      * and forwards through a game.
      */
@@ -171,7 +198,7 @@ typedef enum {
 /* Define a type to describe which tags are to be output.
  */
 typedef enum {
-    ALL_TAGS = 0, SEVEN_TAG_ROSTER = 1, NO_TAGS = 2
+    ALL_TAGS = 0, SEVEN_TAG_ROSTER = 1, NO_TAGS = 2,
 } TagOutputForm;
 
 /* Whether games with a SETUP_TAG should be kept. */
@@ -224,19 +251,21 @@ typedef struct {
     /* Whether to use fuzzy matching for duplicates. */
     Boolean fuzzy_match_duplicates;
     /* At what depth to use fuzzy matching. */
-    int fuzzy_match_depth;
+    unsigned fuzzy_match_depth;
     /* Whether to check the tags for matches. */
     Boolean check_tags;
     /* Whether to add ECO codes. */
     Boolean add_ECO;
     /* Whether an ECO file is currently being parsed. */
     Boolean parsing_ECO_file;
+    
     /* Which level to divide the output. */
     EcoDivision ECO_level;
     /* What form to write the output in. */
     OutputFormat output_format;
     /* Maximum output line length. */
     unsigned max_line_length;
+    
     /* Whether to use a virtual hash table or not. */
     Boolean use_virtual_hash_table;
     /* Whether to match on the number of moves in a game. */
@@ -265,12 +294,18 @@ typedef struct {
     Boolean check_for_fifty_move_rule;
     /* Whether tag matches can be made other than at the start of the tag. */
     Boolean tag_match_anywhere;
-    /* Maximum depth to which to search for positional variations.
+    /* Whether to match only games involving underpromotion. */
+    Boolean match_underpromotion;
+    
+    /* Maximum ply depth to search for positional variations (-x).
      * This is picked up from the length of variations in the positional
      * variations file.
+     * Also set by the --maxply argument.
      */
     unsigned depth_of_positional_search;
+    /* Number of games processed so far. */
     unsigned long num_games_processed;
+    /* Number of games matched so far. */
     unsigned long num_games_matched;
     /* How many games to store in each file. */
     unsigned games_per_file;
@@ -286,6 +321,11 @@ typedef struct {
     unsigned quiescence_threshold;
     /* Maximum number to output (maximum_matches > 0) */
     unsigned long maximum_matches;
+    /* Number of ply to drop at the start (+ve) or end (-ve)
+     * of the game.
+     */
+    int drop_ply_number;
+    
     /* Whether to output a FEN string. Either at the end of the game
      * or replacing a matching comment (see FEN_comment_pattern). */
     Boolean output_FEN_string;
@@ -295,12 +335,37 @@ typedef struct {
     Boolean add_hashcode_comments;
     /* Whether to add a 'matching position' comment. */
     Boolean add_position_match_comments;
+    /* Whether to include a PlyCount tag. */
+    Boolean output_plycount;
     /* Whether to include a tag with the total ply count of the game. */
     Boolean output_total_plycount;
     /* Whether to add a HashCode tag. */
     Boolean add_hashcode_tag;
     /* Whether to fix a Result tag that does not match the game outcome. */
     Boolean fix_result_tags;
+    /* Whether comments should appear on separate lines. */
+    Boolean separate_comment_lines;
+    /* Whether to output each variation as a separate game. */
+    Boolean split_variants;
+    /* Whether to reject games with inconsistent result indications. */
+    Boolean reject_inconsistent_results;
+    /* Whether to allow NULL moves in the main line. */
+    Boolean allow_null_moves;
+    /* Whether to allow nested comments. */
+    Boolean allow_nested_comments;
+    /* Whether to add a MaterialMatch tag with -z. */
+    Boolean add_match_tag;
+    /* Whether to add a MatchLabel tag with FENPattern */
+    Boolean add_matchlabel_tag;
+    /* Whether to only output tags that are explicitly wanted; e.g.,
+     * via -7 or -R.
+     */
+    Boolean only_output_wanted_tags;
+    
+    /* The depth limit for splitting variations.
+     * 0 => no limit.
+     */
+    unsigned split_depth_limit;
     /* Whether this is a CHECKFILE or a NORMALFILE. */
     SourceFileType current_file_type;
     /* Whether SETUP_TAGs are ok in extracted games. */
@@ -309,6 +374,8 @@ typedef struct {
     const char *position_match_comment;
     /* The comment pattern to match for FEN comments (see output_FEN_string) */
     const char *FEN_comment_pattern;
+    /* The comment pattern to match for dropping ply */
+    const char *drop_comment_pattern;
     /* Current input file name. */
     const char *current_input_file;
     /* File of ECO lines. */

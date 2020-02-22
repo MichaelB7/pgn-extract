@@ -1,0 +1,45 @@
+.TH PGN-EXTRACT 1 "May 19, 2013"
+.SH NAME
+pgn-extract - a Portable Game Notation (PGN) extractor
+.SH SYNOPSIS
+.B pgn-extract
+[flags] file.pgn [file.pgn ...]
+.SH DESCRIPTION
+.B pgn-extract
+is a free, open-source program pgn-extract, which is designed to
+support the processing, searching and extraction of chess games from
+files written in PGN format. There are several ways to specify the
+criteria on which to extract: textual move sequences, the position
+reached after a sequence of moves, information in the tag fields, and
+material balance in the ending. Full ANSI C source and a 32-bit
+Windows binary for the program are available under the terms of the
+GNU General Public License. The program includes a semantic analyser
+which will report errors in game scores and it is also able to detect
+duplicate games found in one or more of its input files.
+
+The range of input move formats accepted is fairly wide and includes
+recognition of lower-case piece letters for English and upper-case
+piece letters for Dutch and German. The default output is in English
+Standard Algebraic Notation (SAN), although there is some support for
+output in different notations.
+
+Extracted games may be written out either including or excluding
+comments, NAGs, and variations. Games may be given ECO classifications
+derived from the accompanying file eco.pgn, or a customised version
+provided by the user.
+
+Plus, lots of other useful features that have gradually found their
+way into what was once a relatively simple program!
+.SH OPTIONS
+Run
+.B pgn-extract -h
+to get all the options.
+
+A complete description of each option can be found in
+.B /usr/share/doc/pgn-extract/help.html
+.SH AUTHOR
+pgn-extract was written by David J. Barnes <d.j.barnes@kent.ac.uk>.
+
+This manual page was written by Peter van Rossum <petervr@debian.org>
+and Vincent Legout <vlegout@debian.org>, for the Debian GNU/Linux
+system.

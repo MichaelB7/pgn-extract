@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -56,10 +55,11 @@ typedef enum {
  */
 
 typedef struct ending_details {
-    /* There is not a proper distinction between black and white
-     * but we still need information on the two sets of pieces
-     * specified in the input file.
+    /* Whether the pieces are to be tried against
+     * both colours.
      */
+    Boolean both_colours;
+    /* The number of each set of pieces. */
     int num_pieces[2][NUM_PIECE_VALUES];
     Occurs occurs[2][NUM_PIECE_VALUES];
     /* Numbers of general minor pieces. */
@@ -118,12 +118,13 @@ is_English_piece(char c)
  * in the data.
  */
 static Ending_details *
-new_ending_details(void)
+new_ending_details(Boolean both_colours)
 {
     Ending_details *details = (Ending_details *) malloc_or_die(sizeof (Ending_details));
     int c;
     Piece piece;
 
+    details->both_colours = both_colours;
     for (piece = PAWN; piece <= KING; piece++) {
         for (c = 0; c < 2; c++) {
             details->num_pieces[c][piece] = 0;
@@ -261,7 +262,6 @@ extract_piece_information(const char *line, Ending_details *details, Colour colo
         int number = 1;
 
         if (piece != EMPTY) {
-
             /* Skip over the piece. */
             p++;
             p = extract_combination(p, &occurs, &number, line);
@@ -321,6 +321,9 @@ extract_piece_information(const char *line, Ending_details *details, Colour colo
     }
 }
 
+/* Extract the piece specification from line and fill out
+ * details with the pattern information.
+ */
 static Boolean
 decompose_line(const char *line, Ending_details *details)
 {
@@ -522,11 +525,14 @@ ending_match(Ending_details *details_to_find, int num_pieces[2][NUM_PIECE_VALUES
     }
 
     if (match) {
-        details_to_find->match_depth[game_colour]++;
         if (details_to_find->match_depth[game_colour] < details_to_find->move_depth) {
             /* Not a full match yet. */
             match = FALSE;
+            details_to_find->match_depth[game_colour]++;
         }
+	else {
+	    /* A stable match. */
+	}
     }
     else {
         /* Reset the match counter. */
@@ -535,39 +541,95 @@ ending_match(Ending_details *details_to_find, int num_pieces[2][NUM_PIECE_VALUES
     return match;
 }
 
+/* Check to see whether the given moves lead to a position
+ * that matches the given 'ending' position.
+ * In other words, a position with the required balance
+ * of pieces.
+ */
 static Boolean
-look_for_ending(Move *moves, Ending_details *details_to_find)
+look_for_ending(Game *game_details, Ending_details *details_to_find)
 {
     Boolean game_ok = TRUE;
-    Boolean game_matches = FALSE;
     Boolean match_comment_added = FALSE;
-    Move *next_move = moves;
+    Move *next_move = game_details->moves;
+    Move *move_for_comment = NULL;
     Colour colour = WHITE;
     /* The initial game position has the full set of piece details. */
     int num_pieces[2][NUM_PIECE_VALUES] = {
         /* Dummies for OFF and EMPTY at the start. */
-        /*   P N B R Q K */
+        /*     P  N  B  R  Q  K */
         {0, 0, 8, 2, 2, 2, 1, 1},
         {0, 0, 8, 2, 2, 2, 1, 1}
     };
-    unsigned move_number = 1;
+    Board *board = new_game_board(game_details->tags[FEN_TAG]);
 
+    if(game_details->tags[FEN_TAG] != NULL) {
+        /* Set up num_pieces from the board. */
+        for(int c = 0; c < 2; c++) {
+            for(int p = 0; p < NUM_PIECE_VALUES; p++) {
+                num_pieces[c][p] = 0;
+            }
+        }
+        for(char rank = FIRSTRANK; rank <= LASTRANK; rank++) {
+            for(char col = FIRSTCOL; col <= LASTCOL; col++) {
+                int r = RankConvert(rank);
+                int c = ColConvert(col);
+
+                Piece coloured_piece = board->board[r][c];
+                if(coloured_piece != EMPTY) {
+                    int p = EXTRACT_PIECE(coloured_piece);
+                    num_pieces[EXTRACT_COLOUR(coloured_piece)][p]++;
+                }
+            }
+        }
+    }
     /* Ensure that all previous match indications are cleared. */
     reset_match_depths(endings_to_match);
+
     /* Keep going while the game is ok, and we have some more
      * moves and we haven't exceeded the search depth without finding
      * a match.
      */
-    while (game_ok && (next_move != NULL) && !game_matches) {
-        /* Try before applying each move.
-         * Note, that we wish to try both ways around because we might
-         * have WT,BT WF,BT ... If we don't try BLACK on WHITE success
-         * then we might miss a match.
-         */
-        game_matches = ending_match(details_to_find, num_pieces, WHITE) |
-                ending_match(details_to_find, num_pieces, BLACK);
-        if (!game_matches) {
-            if (*(next_move->move) != '\0') {
+    Boolean white_matches = FALSE;
+    Boolean black_matches = FALSE;
+    while (game_ok && (next_move != NULL) && !(white_matches || black_matches)) {
+	/* Try before applying each move.
+	 * Note, that we wish to try both ways around because we might
+	 * have WT,BT WF,BT ... If we don't try BLACK on WHITE success
+	 * then we might miss a match because a full match takes several
+         * separate individual match steps.
+	 */
+	white_matches = ending_match(details_to_find, num_pieces, WHITE);
+        if(details_to_find->both_colours) {
+            black_matches = ending_match(details_to_find, num_pieces, BLACK);
+        }
+        else {
+            black_matches = FALSE;
+        }
+        if (white_matches || black_matches) {
+            /* See whether a matching comment is required. */
+            if (GlobalState.add_position_match_comments && !match_comment_added) {
+                CommentList *match_comment = create_match_comment(board);
+                if (move_for_comment != NULL) {
+                    append_comments_to_move(move_for_comment, match_comment);
+                }
+                else {
+                    if(game_details->prefix_comment == NULL) {
+                        game_details->prefix_comment = match_comment;
+                    }
+                    else {
+                        CommentList *comm = game_details->prefix_comment;
+                        while(comm->next != NULL) {
+                            comm = comm->next;
+                        }
+                        comm->next = match_comment;
+                    }
+                }
+            }
+        }
+        else if (*(next_move->move) != '\0') {
+            /* Try the next position. */
+            if (apply_move(next_move, board)) {
                 /* Remove any captured pieces. */
                 if (next_move->captured_piece != EMPTY) {
                     num_pieces[OPPOSITE_COLOUR(colour)][next_move->captured_piece]--;
@@ -578,57 +640,67 @@ look_for_ending(Move *moves, Ending_details *details_to_find)
                     num_pieces[OPPOSITE_COLOUR(colour)][PAWN]--;
                 }
 
+                move_for_comment = next_move;
                 colour = OPPOSITE_COLOUR(colour);
                 next_move = next_move->next;
-                if (colour == WHITE) {
-                    move_number++;
-                }
             }
             else {
-                /* An empty move. */
-                fprintf(GlobalState.logfile,
-                        "Internal error: Empty move in look_for_ending.\n");
                 game_ok = FALSE;
             }
         }
         else {
-            /* Match.
-               See whether a matching comment is required.
-             */
-            if (GlobalState.add_position_match_comments && !match_comment_added) {
-                if (next_move != NULL) {
-                    CommentList *comment = create_match_comment(next_move);
-                    append_comments_to_move(next_move, comment);
-                }
-            }
+            /* An empty move. */
+            fprintf(GlobalState.logfile,
+                    "Internal error: Empty move in look_for_ending.\n");
+            game_ok = FALSE;
         }
     }
-    if (!game_ok) {
-        game_matches = FALSE;
+    (void) free((void *) board);
+    if(game_ok && (white_matches || black_matches)) {
+        if(GlobalState.add_match_tag) {
+            game_details->tags[MATERIAL_MATCH_TAG] =
+                copy_string(white_matches ? "White" : "Black");
+        }
+        return TRUE;
     }
-    return game_matches;
+    else {
+        return FALSE;
+    }
 }
 
+/* Check to see whether the given moves lead to a position
+ * that matches one of the required 'ending' position.
+ * In other words, a position with the required balance
+ * of pieces.
+ */
 Boolean
-check_for_ending(Move *moves)
-{ /* Match if there are no endings to match. */
+check_for_ending(Game *game)
+{
+    /* Match if there are no endings to match. */
     Boolean matches = (endings_to_match == NULL) ? TRUE : FALSE;
     Ending_details *details;
 
     for (details = endings_to_match; !matches && (details != NULL);
             details = details->next) {
-        matches = look_for_ending(moves, details);
+        matches = look_for_ending(game, details);
     }
     return matches;
 }
 
+/* Decompose the text of line to extract two sets of
+ * piece configurations.
+ * If both_colours is TRUE then matches will be tried
+ * for both colours in each configuration.
+ * Otherwise, the first set of pieces are assumed to
+ * be white and the second to be black.
+ */
 Boolean
-process_ending_line(const char *line)
+process_ending_line(const char *line, Boolean both_colours)
 {
     Boolean Ok = TRUE;
 
     if (non_blank_line(line)) {
-        Ending_details *details = new_ending_details();
+        Ending_details *details = new_ending_details(both_colours);
 
         if (decompose_line(line, details)) {
             /* Add it on to the list. */
@@ -643,7 +715,7 @@ process_ending_line(const char *line)
 }
 
 Boolean
-build_endings(const char *infile)
+build_endings(const char *infile, Boolean both_colours)
 {
     FILE *fp = fopen(infile, "r");
     Boolean Ok = TRUE;
@@ -655,7 +727,7 @@ build_endings(const char *infile)
     else {
         char *line;
         while ((line = read_line(fp)) != NULL) {
-            Ok &= process_ending_line(line);
+            Ok &= process_ending_line(line, both_colours);
             (void) free(line);
         }
         (void) fclose(fp);

@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -41,7 +40,7 @@
 #include "lists.h"
 #include "mymalloc.h"
 
-#define CURRENT_VERSION "v17-37"
+#define CURRENT_VERSION "v19-04"
 #define URL "https://www.cs.kent.ac.uk/people/staff/djb/pgn-extract/"
 
 /* The prefix of the arguments allowed in an argsfile.
@@ -65,6 +64,8 @@ static void read_args_file(const char *infile);
 static game_number *extract_game_number_list(const char *number_list);
 #if defined(__unix__) || defined(__linux__) || defined(__APPLE__)
 int strcasecmp(const char *, const char *);
+#else
+int _stricmp(const char *s1, const char *s2);
 #endif
 
 /* Select the correct function according to operating system. */
@@ -114,7 +115,7 @@ usage_and_exit(void)
     const char *help_data[] = {
         "-7 -- output only the seven tag roster for each game. Other tags (apart",
         "      from FEN and possibly ECO) are discarded (See -e).",
-        "-#num -- output num games per file, to files named 1.pgn, 2.pgn, etc.",
+        "-#num[,num] -- output num games per file, to files named 1.pgn, 2.pgn, etc.",
 
         "",
 
@@ -160,12 +161,12 @@ usage_and_exit(void)
         "      this option must precede the -t or -T options.",
         "-s -- silent mode: don't report each game as it is extracted.",
         "-ttagfile -- file of player, date, result or FEN extraction criteria.",
-        "-Tcriterion -- player, date, or result extraction criterion.",
+        "-Tcriterion -- player, date, eco code, hashcode, FEN position, annotator or result, extraction criteria.",
         "-U -- don't output games that only occur once. (See -d).",
         "-vvariations -- the file variations contains the textual lines of interest.",
         "-V -- don't include variations in the output. Ordinarily these are retained.",
         "-wwidth -- set width as an approximate line width for output.",
-        "-W[cm|epd|halg|lalg|elalg|xlalg|san] -- specify the output format to use.",
+        "-W[cm|epd|halg|lalg|elalg|xlalg|xolalg|san] -- specify the output format to use.",
         "      Default is SAN.",
         "      -W means use the input format.",
         "      -Wcm is (a possibly obsolete) ChessMaster format.",
@@ -175,6 +176,7 @@ usage_and_exit(void)
         "      -Wlalg is long algebraic.",
         "      -Welalg is enhanced long algebraic.",
         "      -Wxlalg is enhanced long algebraic with x for captures and - for non capture moves.",
+        "      -Wxolalg is -Wxlalg but with O-O and O-O-O for castling.",
         "      -Wuci is output compatible with the UCI protocol.",
         "-xvariations -- the file variations contains the lines resulting in",
         "                positions of interest.",
@@ -185,21 +187,30 @@ usage_and_exit(void)
         "",
 
         "--addhashcode - output a HashCode tag",
+        "--addlabeltag - output a MatchLabel tag with FENPattern",
+        "--addmatchtag - output a MaterialMatch tag with -z",
+        "--allownullmoves - allow NULL moves in the main line",
         "--append - see -a",
         "--checkfile - see -c",
         "--checkmate - see -M",
+        "--commentlines - output each comment on a separate line",
+        "--dropbefore - drop opening ply before a matching comment string",
+        "--dropply - drop the given number of ply from the beginning of the game",
         "--duplicates - see -d",
         "--evaluation - include a position evaluation after each move",
         "--fencomments - include a FEN string after each move",
         "--fifty - only output games that include fifty moves with no capture or pawn move.",
-        "--fixresulttags - correct Result tags that conflict with the game outcome (checkmate or stalemate).",
+        "--fixresulttags - correct Result tags that conflict with the game outcome or terminating result.",
         "--fuzzydepth plies - positional duplicates match",
         "--hashcomments - include a hashcode string after each move",
         "--help - see -h",
         "--json - output the game in JSON format",
         "--keepbroken - retain games with errors",
         "--linelength - see -w",
+        "--matchplylimit - maximum ply depth to search for positional matches",
         "--markmatches - mark positional and material matches with a comment; see -t, -v, and -z",
+        "--nestedcomments - allow nested comments",
+        "--nobadresults - reject games with inconsistent result indications.",
         "--nochecks - don't output + and # after moves.",
         "--nocomments - see -C",
         "--noduplicates - see -D",
@@ -213,6 +224,7 @@ usage_and_exit(void)
         "--novars - see -V",
         "--onlysetuptags - only match games with a SetUp tag.",
         "--output - see -o",
+        "--plycount - include a PlyCount tag.",
         "--plylimit - limit the number of plies output.",
         "--quiescent N - position quiescence length (default 0)",
         "--quiet - No status processing output (see, also, -s).",
@@ -220,11 +232,14 @@ usage_and_exit(void)
         "--selectonly range[,range ...] - only output the selected matched game(s)",
         "--seven - see -7",
         "--skipmatching range[,range ...] - don't output the selected matched game(s)",
+        "--splitvariants [depth] - output each variation (to the given depth) as a separate game.",
         "--stalemate - only output games that end in stalemate.",
         "--stopafter N - stop after matching N games (N > 0)",
         "--tagsubstr - match in any part of a tag (see -T and -t).",
         "--totalplycount - include a tag with the total number of plies in a game.",
+        "--underpromotion - match only games that contain an underpromotion.",
         "--version - print the current version number and exit.",
+        "--xroster - don't output tags not included with the -R option (see -R).",
 
         /* Must be NULL terminated. */
         (char *) NULL,
@@ -236,7 +251,7 @@ usage_and_exit(void)
             "pgn-extract %s (%s): a Portable Game Notation (PGN) manipulator.\n",
             CURRENT_VERSION, __DATE__);
     fprintf(GlobalState.logfile,
-            "Copyright (C) 1994-2017 David J. Barnes (d.j.barnes@kent.ac.uk)\n");
+            "Copyright (C) 1994-2019 David J. Barnes (d.j.barnes@kent.ac.uk)\n");
     fprintf(GlobalState.logfile, "%s\n\n", URL);
     fprintf(GlobalState.logfile, "Usage: pgn-extract [arguments] [file.pgn ...]\n");
 
@@ -286,7 +301,9 @@ read_args_file(const char *infile)
                             process_roster_line(line);
                             break;
                         case ENDINGS_ARGUMENT:
-                            process_ending_line(line);
+                        case ENDINGS_COLOURED_ARGUMENT:
+                            process_ending_line(line,
+                                                linetype == ENDINGS_ARGUMENT);
                             (void) free(line);
                             break;
                         default:
@@ -382,6 +399,7 @@ read_args_file(const char *infile)
                          * the current line.
                          */
                     case ENDINGS_ARGUMENT:
+                    case ENDINGS_COLOURED_ARGUMENT:
                     case HASHCODE_MATCH_ARGUMENT:
                     case MOVES_ARGUMENT:
                     case OUTPUT_FEN_STRING_ARGUMENT:
@@ -428,6 +446,7 @@ classify_arg(const char *line)
             case MOVES_ARGUMENT:
             case POSITIONS_ARGUMENT:
             case ENDINGS_ARGUMENT:
+            case ENDINGS_COLOURED_ARGUMENT:
             case TAG_EXTRACTION_ARGUMENT:
             case LINE_WIDTH_ARGUMENT:
             case OUTPUT_FORMAT_ARGUMENT:
@@ -729,15 +748,30 @@ process_argument(char arg_letter, const char *associated_value)
                         GlobalState.output_filename);
                 exit(1);
             }
-            else if (sscanf(associated_value, "%u",
-                    &GlobalState.games_per_file) != 1) {
-                fprintf(GlobalState.logfile,
-                        "-%c should be followed by an unsigned integer.\n",
-                        arg_letter);
-                exit(1);
-            }
             else {
-                /* Value set. */
+                if(strchr(associated_value, ',') != NULL) {
+                    unsigned games, file_number;
+                    if(sscanf(associated_value, "%u,%u", &games, &file_number) == 2) {
+                        GlobalState.games_per_file = games;
+                        GlobalState.next_file_number = file_number;
+                    }
+                    else {
+                        fprintf(GlobalState.logfile,
+                                "-%c should be followed by either one or two unsigned integers.\n",
+                                arg_letter);
+                        exit(1);
+                    }
+                }
+                else if (sscanf(associated_value, "%u",
+                        &GlobalState.games_per_file) != 1) {
+                    fprintf(GlobalState.logfile,
+                            "-%c should be followed by an unsigned integer.\n",
+                            arg_letter);
+                    exit(1);
+                }
+                else {
+                    /* Value set. */
+                }
             }
             break;
         case FILE_OF_ARGUMENTS_ARGUMENT:
@@ -803,19 +837,19 @@ process_argument(char arg_letter, const char *associated_value)
                 GlobalState.keep_variations = FALSE;
                 /* @@@ Warning: arbitrary value. */
                 set_output_line_length(5000);
-                format = LALG;
             }
             GlobalState.output_format = format;
         }
             break;
         case SEVEN_TAG_ROSTER_ARGUMENT:
-            if (GlobalState.tag_output_format == ALL_TAGS ||
-                    GlobalState.tag_output_format == SEVEN_TAG_ROSTER) {
+            if ((GlobalState.tag_output_format == ALL_TAGS ||
+                 GlobalState.tag_output_format == SEVEN_TAG_ROSTER) &&
+                     !GlobalState.only_output_wanted_tags) {
                 GlobalState.tag_output_format = SEVEN_TAG_ROSTER;
             }
             else {
                 fprintf(GlobalState.logfile,
-                        "-%c clashes with another argument.\n",
+                        "-%c clashes with another roster-related argument.\n",
                         SEVEN_TAG_ROSTER_ARGUMENT);
                 exit(1);
             }
@@ -887,7 +921,14 @@ process_argument(char arg_letter, const char *associated_value)
             GlobalState.suppress_originals = TRUE;
             break;
         case DONT_KEEP_VARIATIONS_ARGUMENT:
-            GlobalState.keep_variations = FALSE;
+            if(!GlobalState.split_variants) {
+                GlobalState.keep_variations = FALSE;
+            }
+            else {
+                fprintf(GlobalState.logfile,
+                        "-%c clashes with the --splitvariants flag.\n", arg_letter);
+                exit(1);
+            }
             break;
         case USE_VIRTUAL_HASH_TABLE_ARGUMENT:
             GlobalState.use_virtual_hash_table = TRUE;
@@ -921,8 +962,10 @@ process_argument(char arg_letter, const char *associated_value)
             }
             break;
         case ENDINGS_ARGUMENT:
+        case ENDINGS_COLOURED_ARGUMENT:
             if (*filename != '\0') {
-                if (!build_endings(filename)) {
+                if (!build_endings(filename,
+                                   arg_letter == ENDINGS_ARGUMENT)) {
                     exit(1);
                 }
             }
@@ -957,6 +1000,18 @@ process_long_form_argument(const char *argument, const char *associated_value)
         GlobalState.add_hashcode_tag = TRUE;
         return 1;
     }
+    else if (stringcompare(argument, "addlabeltag") == 0) {
+        GlobalState.add_matchlabel_tag = TRUE;
+        return 1;
+    }
+    else if (stringcompare(argument, "addmatchtag") == 0) {
+        GlobalState.add_match_tag = TRUE;
+        return 1;
+    }
+    else if (stringcompare(argument, "allownullmoves") == 0) {
+        GlobalState.allow_null_moves = TRUE;
+        return 1;
+    }
     else if (stringcompare(argument, "append") == 0) {
         process_argument(APPEND_TO_OUTPUT_FILE_ARGUMENT, associated_value);
         return 2;
@@ -968,6 +1023,36 @@ process_long_form_argument(const char *argument, const char *associated_value)
     else if (stringcompare(argument, "checkmate") == 0) {
         process_argument(MATCH_CHECKMATE_ARGUMENT, "");
         return 1;
+    }
+    else if (stringcompare(argument, "commentlines") == 0) {
+        GlobalState.separate_comment_lines = TRUE;
+        return 1;
+    }
+    else if (stringcompare(argument, "dropbefore") == 0) {
+        /* Save the comment string to be matched. */
+        if (associated_value != NULL) {
+            GlobalState.drop_comment_pattern = copy_string(associated_value);
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a string following it.\n", argument);
+            exit(1);
+        }
+        return 2;
+    }
+    else if (stringcompare(argument, "dropply") == 0) {
+        /* Extract the number. */
+        int number = 0;
+
+        if (sscanf(associated_value, "%d", &number) == 1) {
+            GlobalState.drop_ply_number = number;
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a number following it.\n", argument);
+            exit(1);
+        }
+        return 2;
     }
     else if (stringcompare(argument, "duplicates") == 0) {
         process_argument(DUPLICATES_FILE_ARGUMENT, associated_value);
@@ -1001,22 +1086,15 @@ process_long_form_argument(const char *argument, const char *associated_value)
     }
     else if (stringcompare(argument, "fuzzydepth") == 0) {
         /* Extract the depth. */
-        int depth = 0;
+        unsigned depth = 0;
 
-        if (sscanf(associated_value, "%d", &depth) == 1) {
-            if (depth >= 0) {
-                GlobalState.fuzzy_match_duplicates = TRUE;
-                GlobalState.fuzzy_match_depth = depth;
-            }
-            else {
-                fprintf(GlobalState.logfile,
-                        "--%s requires a number greater than or equal to zero.\n", argument);
-                exit(1);
-            }
+        if (sscanf(associated_value, "%u", &depth) == 1) {
+            GlobalState.fuzzy_match_duplicates = TRUE;
+            GlobalState.fuzzy_match_depth = depth;
         }
         else {
             fprintf(GlobalState.logfile,
-                    "--%s requires a number following it.\n", argument);
+                    "--%s requires a positive number following it.\n", argument);
             exit(1);
         }
         return 2;
@@ -1050,10 +1128,49 @@ process_long_form_argument(const char *argument, const char *associated_value)
         }
         else {
             fprintf(GlobalState.logfile,
-                    "--markmatches requires a comment string following it.\n");
+                    "--%s requires a comment string following it.\n", argument);
             exit(1);
         }
         return 2;
+    }
+    else if (stringcompare(argument, "matchplylimit") == 0) {
+        unsigned limit = 0;
+
+        /* Extract the limit. */
+        if (sscanf(associated_value, "%u", &limit) == 1) {
+            if (limit > 0) {
+                if(limit >= GlobalState.depth_of_positional_search) {
+                    GlobalState.depth_of_positional_search = limit;
+                }
+                else {
+                    fprintf(GlobalState.logfile,
+                            "--%s of %u conflicts with existing higher limit of %u\n",
+                            argument,
+                            limit,
+                            GlobalState.depth_of_positional_search);
+                    exit(1);
+                }
+            }
+            else {
+                fprintf(GlobalState.logfile,
+                        "--%s requires a number greater than or equal to zero.\n", argument);
+                exit(1);
+            }
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a number following it.\n", argument);
+            exit(1);
+        }
+        return 2;
+    }
+    else if (stringcompare(argument, "nestedcomments") == 0) {
+        GlobalState.allow_nested_comments = TRUE;
+        return 1;
+    }
+    else if (stringcompare(argument, "nobadresults") == 0) {
+        GlobalState.reject_inconsistent_results = TRUE;
+        return 1;
     }
     else if (stringcompare(argument, "nochecks") == 0) {
         GlobalState.keep_checks = FALSE;
@@ -1098,7 +1215,7 @@ process_long_form_argument(const char *argument, const char *associated_value)
         }
         else {
             fprintf(GlobalState.logfile,
-                    "--notags clashes with another argument.\n");
+                    "--notags clashes with another roster-related argument.\n");
             exit(1);
         }
         return 1;
@@ -1122,6 +1239,10 @@ process_long_form_argument(const char *argument, const char *associated_value)
     else if (stringcompare(argument, "output") == 0) {
         process_argument(WRITE_TO_OUTPUT_FILE_ARGUMENT, associated_value);
         return 2;
+    }
+    else if (stringcompare(argument, "plycount") == 0) {
+        GlobalState.output_plycount = TRUE;
+        return 1;
     }
     else if (stringcompare(argument, "plylimit") == 0) {
         int limit = 0;
@@ -1202,6 +1323,31 @@ process_long_form_argument(const char *argument, const char *associated_value)
         }
         return 2;
     }
+    else if (stringcompare(argument, "splitvariants") == 0) {
+        if(GlobalState.keep_variations) {
+            GlobalState.split_variants = TRUE;
+            if(associated_value != NULL) {
+                unsigned limit;
+                if(sscanf(associated_value, "%u", &limit) == 1) {
+                    GlobalState.split_depth_limit = limit;
+                    return 2;
+                }
+                else {
+                    return 1;
+                }
+            }
+            else {
+                return 1;
+            }
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s clashes with the -%c flag.\n", argument,
+                    DONT_KEEP_VARIATIONS_ARGUMENT);
+            exit(1);
+            return 1;
+        }
+    }
     else if (stringcompare(argument, "stalemate") == 0) {
         GlobalState.match_only_stalemate = TRUE;
         return 1;
@@ -1235,9 +1381,23 @@ process_long_form_argument(const char *argument, const char *associated_value)
         GlobalState.output_total_plycount = TRUE;
         return 1;
     }
+    else if (stringcompare(argument, "underpromotion") == 0) {
+        GlobalState.match_underpromotion = TRUE;
+        return 1;
+    }
     else if (stringcompare(argument, "version") == 0) {
         fprintf(GlobalState.logfile, "pgn-extract %s\n", CURRENT_VERSION);
         exit(0);
+        return 1;
+    }
+    else if (stringcompare(argument, "xroster") == 0) {
+        if(GlobalState.tag_output_format == SEVEN_TAG_ROSTER) {
+            fprintf(GlobalState.logfile,
+                    "--%s clashes with -%c.\n",
+                    argument, SEVEN_TAG_ROSTER_ARGUMENT);
+            exit(1);
+        }
+        GlobalState.only_output_wanted_tags = TRUE;
         return 1;
     }
     else {
@@ -1290,7 +1450,7 @@ extract_game_number_list(const char *number_list)
             ok = FALSE;
         }
         if(ok) {
-            game_number *list_item = malloc_or_die(sizeof(*list_item));
+            game_number *list_item = (game_number *) malloc_or_die(sizeof(*list_item));
             list_item->min = min;
             list_item->max = max;
             list_item->next = NULL;

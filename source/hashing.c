@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -123,33 +122,85 @@ Boolean check_for_only_repetition(PositionCount *position_counts)
 }
 
 /*
+ * Encode the castling rights of the current board
+ * as a 4-bit pattern.
+ */
+static unsigned short
+encode_castling_rights(const Board *board)
+{
+    unsigned short rights = 0;
+    if(board->WKingCastle) {
+        rights |= 0x08;
+    }
+    if(board->WQueenCastle) {
+        rights |= 0x04;
+    }
+    if(board->BKingCastle) {
+        rights |= 0x02;
+    }
+    if(board->BQueenCastle) {
+        rights |= 0x01;
+    }
+    return rights;
+}
+
+/*
+ * Return TRUE if the position on board matches the entry details
+ * for the purposes of position repetition matches:
+ *     + Same board position (based on a hash value)
+ *     + Same castling rights.
+ *     + Same en passant status (i.e., no ep possible).
+ *     + Same player to move.
+ */
+static Boolean
+position_matches(PositionCount *entry, const Board *board)
+{
+    if(board->weak_hash_value != entry->hash_value) {
+        return FALSE;
+    }
+    else if(board->to_move != entry->to_move) {
+        return FALSE;
+    }
+    else if(encode_castling_rights(board) != entry->castling_rights) {
+        return FALSE;
+    }
+    else if(board->ep_rank != entry->ep_rank || board->ep_col != entry->ep_col) {
+        return FALSE;
+    }
+    else {
+        return TRUE;
+    }
+}
+
+/*
  * Add hash_value as a position in the current game.
  * Return TRUE if a match is made, false otherwise.
  * NB: The assumption is that position_counts is not NULL.
  */
 Boolean
-update_position_counts(PositionCount *position_counts, HashCode hash_value)
+update_position_counts(PositionCount *position_counts, const Board *board)
 {
+    //fprintf(stderr, "U: %d,%d\n", board->ep_rank, board->ep_col);
     PositionCount *entry = position_counts;
     if (position_counts == NULL) {
         /* Don't try to match in variations. */
         return FALSE;
     }
     /* Try to find an existing entry. */
-    while (entry != NULL && entry->hash_value != hash_value) {
+    while (entry != NULL && !position_matches(entry, board)) {
         entry = entry->next;
     }
     if (entry == NULL) {
         /* New position. */
-        entry = (PositionCount *) malloc_or_die(sizeof (*entry));
-        entry->hash_value = hash_value;
-        entry->count = 0;
+        entry = new_position_count_list(board);
         /* Insert just after the head of the list. */
         entry->next = position_counts->next;
         position_counts->next = entry;
     }
-    /* Increment the count. */
-    entry->count++;
+    else {
+        /* Increment the count. */
+        entry->count++;
+    }
     return entry->count >= 3;
 }
 
@@ -172,10 +223,20 @@ free_position_count_list(PositionCount *position_counts)
  * This will have a single entry at its head.
  */
 PositionCount *
-new_position_count_list(HashCode hash_value)
+new_position_count_list(const Board *board)
 {
     PositionCount *head = (PositionCount *) malloc_or_die(sizeof (*head));
-    head->hash_value = hash_value;
+    head->hash_value = board->weak_hash_value;
+    head->to_move = board->to_move;
+    head->castling_rights = encode_castling_rights(board);
+    if(board->EnPassant) {
+        head->ep_rank = board->ep_rank;
+        head->ep_col = board->ep_col;
+    }
+    else {
+        head->ep_rank = '\0';
+        head->ep_col = '\0';
+    }
     head->count = 1;
     head->next = NULL;
     return head;
@@ -191,6 +252,8 @@ PositionCount *copy_position_count_list(PositionCount *original)
     while (original != NULL) {
         PositionCount *entry = (PositionCount *) malloc_or_die(sizeof (*entry));
         entry->hash_value = original->hash_value;
+        entry->to_move = original->to_move;
+        entry->castling_rights = original->castling_rights;
         entry->count = original->count;
         entry->next = NULL;
 
@@ -338,6 +401,10 @@ previous_virtual_occurance(Game game_details)
             /* Where to write the next VirtualHashLog entry. */
             static long next_free_entry = 0l;
 
+            /* Avoid valgrind error when writing unset bytes that
+             * are part of the structure padding.
+             */
+            memset((void *) &entry, 0, sizeof(entry));
             /* Store the XOR of the two hash values. */
             entry.final_hash_value = game_details.final_hash_value;
             entry.cumulative_hash_value = game_details.cumulative_hash_value;
@@ -382,7 +449,7 @@ previous_virtual_occurance(Game game_details)
  * cumulative hash value.
  */
 const char *
-previous_occurance(Game game_details, int plycount)
+previous_occurance(Game game_details, unsigned plycount)
 {
     const char *original_filename = NULL;
     if (GlobalState.use_virtual_hash_table) {

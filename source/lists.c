@@ -1,23 +1,22 @@
 /*
- *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2017 David Barnes
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 1, or (at your option)
- *  any later version.
+ *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
+ *  Copyright (C) 1994-2019 David J. Barnes
  *
- *  This program is distributed in the hope that it will be useful,
+ *  pgn-extract is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  pgn-extract is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  along with pgn-extract. If not, see <http://www.gnu.org/licenses/>.
  *
- *  David Barnes may be contacted as D.J.Barnes@kent.ac.uk
+ *  David J. Barnes may be contacted as d.j.barnes@kent.ac.uk
  *  https://www.cs.kent.ac.uk/people/staff/djb/
- *
  */
 
 #include <stdio.h>
@@ -30,6 +29,7 @@
 #include "typedef.h"
 #include "lists.h"
 #include "taglist.h"
+#include "moves.h"
 
 /* Define a type to permit tag strings to be associated with
  * a TagOperator for selecting relationships between them
@@ -140,7 +140,7 @@ add_to_taglist(const char *str, StringArray *list)
             }
         }
         else {
-            list->tag_strings = (TagSelection *) realloc((void *) list->tag_strings,
+            list->tag_strings = (TagSelection *) realloc_or_die((void *) list->tag_strings,
                     (list->num_allocated_elements + MORE_LIST_SPACE + 1) *
                     sizeof (TagSelection));
             if (list->tag_strings != NULL) {
@@ -287,7 +287,10 @@ add_tag_to_list(int tag, const char *tagstr, TagOperator operator)
          */
         extend_tag_list_length(tag + 1);
     }
-    if ((tag >= 0) && (tag < tag_list_length)) {
+    if(tag == FEN_TAG) {
+        add_fen_pattern_match(tagstr, FALSE, NULL);
+    }
+    else if ((tag >= 0) && (tag < tag_list_length)) {
         const char *string_to_store = tagstr;
         int ix;
 
@@ -339,6 +342,9 @@ extract_tag_argument(const char *argstr)
             break;
         case 'e':
             add_tag_to_list(ECO_TAG, arg, NONE);
+            break;
+        case 'f':
+            add_tag_to_list(FEN_TAG, arg, NONE);
             break;
         case 'h':
             add_tag_to_list(HASHCODE_TAG, arg, NONE);
@@ -456,14 +462,16 @@ check_date(const char *date_string, StringArray *list)
     return wanted;
 }
 
+/* Check whether the Elo value matches any of those
+ * in the list.
+ */
 static Boolean
 check_elo(const char *elo_string, StringArray *list)
 {
     unsigned list_index;
-    Boolean wanted = TRUE;
+    Boolean wanted = FALSE;
 
-    for (list_index = 0; (list_index < list->num_used_elements) && wanted;
-            list_index++) {
+    for (list_index = 0; (list_index < list->num_used_elements) && !wanted; list_index++) {
         const char *list_string = list->tag_strings[list_index].tag_string;
         TagOperator operator = list->tag_strings[list_index].operator;
 
@@ -599,12 +607,13 @@ check_tag_details_not_ECO(char *Details[], int num_details)
                 wanted = FALSE;
             }
         }
-        else if (TagLists[PSEUDO_ELO_TAG].num_used_elements != 0) {
+
+        if (TagLists[PSEUDO_ELO_TAG].num_used_elements != 0) {
             /* Check both the White and Black lists. */
             if (Details[WHITE_ELO_TAG] != NULL) {
                 wanted = check_elo(Details[WHITE_ELO_TAG],
                         &TagLists[PSEUDO_ELO_TAG]);
-                /* If we didn't find a player there, try for the opponent. */
+                /* If we didn't find the ELO there, try for the opponent. */
                 if (!wanted && (Details[BLACK_ELO_TAG] != NULL)) {
                     wanted = check_elo(Details[BLACK_ELO_TAG],
                             &TagLists[PSEUDO_ELO_TAG]);
