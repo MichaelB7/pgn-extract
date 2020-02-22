@@ -1,0 +1,23 @@
+[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "1-0"]
+[SetUp "1"]
+[FEN "1r5k/q4prp/p4NpQ/P1N1p3/8/3B1R2/1PP3PP/7K w - - 0 31"]
+
+31. Rh3 -- 32. Qxh7+ Rxh7 33. Rxh7# 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+[SetUp "1"]
+[FEN "4r1k1/2p2p2/5np1/Qp4q1/2p3P1/2B2P2/PP6/K6R w - - 0 1"]
+
+1. Qxb5 -- (1... Qxb5 2. Bxf6 Re1+ 3. Rxe1 Qc6 4. g5)(1... Qe3 2. Qxe8+) *

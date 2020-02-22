@@ -1,0 +1,2 @@
+e4 { This game contains { a nested comment } which should be
+handled ok with the --nestedcomment option. } *
