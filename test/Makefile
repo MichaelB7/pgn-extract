@@ -1,5 +1,5 @@
 # Makefile to run a battery of tests of the basic functionality of pgn-extract.
-# Copyright (C) David J. Barnes, 2013-2017
+# Copyright (C) David J. Barnes, 2013-2019
 #
 # Each test is run and then, where relevant, a comparison is made between
 # the output files generated in the current directory and the 'oracle'
@@ -9,12 +9,23 @@
 # differ only in letter case. In general, double letters have been
 # used for output-files generated from using upper-case flag letters.
 
-PGN_EXTRACT=../pgn-extract
+# Customise these for different OSs.
+SEP=/
+RM=rm -f
+CMP=cmp
+
+# Possible Windows settings
+#SEP=\\
+#RM=del
+#CMP=diff
+
+PGN_EXTRACT=..$(SEP)pgn-extract
 # Use for memory checking if valgrind is installed.
-#PGN_EXTRACT=valgrind --dsymutil=yes ../pgn-extract
+#PGN_EXTRACT=valgrind --dsymutil=yes ..$(SEP)pgn-extract
+#PGN_EXTRACT=valgrind --dsymutil=yes --leak-check=full ..$(SEP)pgn-extract
 
 # Location of the file of ECO classifications.
-ECO_FILE=../eco.pgn
+ECO_FILE=..$(SEP)eco.pgn
 
 # Location of the input files
 INPUT=infiles
@@ -27,21 +38,23 @@ all: no-flags-1 no-flags-2 test-7 test-append test-AA test-b test-p \
      test-noduplicates test-e test-EE test-f test-FF test-h test-l \
      test-LL test-checkmate test-n test-NN test-output test-PP test-r \
      test-RR test-s test-SS test-t test-TT test-nounique test-v \
-     test-VV test-linelength test-WW test-x test-ZZ test-z test-hash \
+     test-VV test-linelength test-WW test-x test-ZZ test-y test-z test-hash \
      test-evaluation test-fencomments test-markmatches test-nochecks \
      test-nomovenumbers test-noresults test-notags test-plylimit \
-     test-stalemate test-long-line test-totalplycount test-addhashcode \
-     test-selectonly test-fifty test-repetition test-promotion test-fixresulttags \
-     test-fuzzydepth test-setup test-stopafter test-skipmatching
+     test-stalemate test-long-line test-plycount test-addhashcode \
+     test-selectonly test-fifty test-repetition test-promotion \
+     test-fixresulttags test-fuzzydepth test-setup test-stopafter \
+     test-skipmatching test-splitvariants test-nobadresults test-allownullmoves \
+     test-matchplylimit test-nestedcomments test-FENPattern test-dropply
 
 # BEWARE: This removes all PGN files in the current directory.
 # The required test PGN files are assumed to be in $(INPUT).
 clean:
-	-rm *.pgn *og.txt
+	-$(RM) *.pgn *og.txt
 
 # No flags:
 #     + No input file.
-#     - Input file(s): N/A
+#     - Input file(s): N$(SEP)A
 #     - Example input:
 #       f3 e5 g4 Qh4 0-1
 #     - Resulting output should be that the game input on standard input is
@@ -50,7 +63,7 @@ clean:
 #       Contents of fools-mate.pgn on standard output.
 no-flags-1:
 	echo "test: No input file."
-	$(PGN_EXTRACT) --quiet < $(INPUT)/fools-mate.txt
+	$(PGN_EXTRACT) --quiet < $(INPUT)$(SEP)fools-mate.txt
 
 # No flags:
 #     + Single input file
@@ -59,19 +72,19 @@ no-flags-1:
 #     - Expected output: Contents of fools-mate.pgn should appear on standard output.
 no-flags-2:
 	echo "test: No flags."
-	$(PGN_EXTRACT) --quiet $(INPUT)/fools-mate.txt
+	$(PGN_EXTRACT) --quiet $(INPUT)$(SEP)fools-mate.txt
 
-# -7 / --seven
+# -7 $(SEP) --seven
 #     + Input file with games having tags additional to the seven tag roster.
 #     - Input file(s): test-7.pgn
 #     - Game output should have only the tags of the seven tag roster.
 #     - Expected output: test-7-out.pgn
 test-7:
 	echo "test-7:"
-	$(PGN_EXTRACT) -7 -otest-7-out.pgn --quiet $(INPUT)/test-7.pgn
-	cmp test-7-out.pgn $(OUTPUT)/test-7-out.pgn
+	$(PGN_EXTRACT) -7 -otest-7-out.pgn --quiet $(INPUT)$(SEP)test-7.pgn
+	$(CMP) test-7-out.pgn $(OUTPUT)$(SEP)test-7-out.pgn
 
-# -a / --append
+# -a $(SEP) --append
 #     + Input file containing games in any accepted format.
 #     - Input file(s): test-a.txt
 #     - Resulting output should contain two versions of the input game
@@ -80,13 +93,13 @@ test-7:
 #     - Expected output: test-a-out.pgn
 test-append:
 	echo "test-append:"
-	$(PGN_EXTRACT) --output test-a-out.pgn --quiet $(INPUT)/test-a.txt
-	$(PGN_EXTRACT) -atest-a-out.pgn --quiet $(INPUT)/test-a.txt
-	cmp test-a-out.pgn $(OUTPUT)/test-a-out.pgn
+	$(PGN_EXTRACT) --output test-a-out.pgn --quiet $(INPUT)$(SEP)test-a.txt
+	$(PGN_EXTRACT) -atest-a-out.pgn --quiet $(INPUT)$(SEP)test-a.txt
+	$(CMP) test-a-out.pgn $(OUTPUT)$(SEP)test-a-out.pgn
 
-	$(PGN_EXTRACT) --output test-a-out.pgn --quiet $(INPUT)/test-a.txt
-	$(PGN_EXTRACT) --append test-a-out.pgn --quiet $(INPUT)/test-a.txt
-	cmp test-a-out.pgn $(OUTPUT)/test-a-out.pgn
+	$(PGN_EXTRACT) --output test-a-out.pgn --quiet $(INPUT)$(SEP)test-a.txt
+	$(PGN_EXTRACT) --append test-a-out.pgn --quiet $(INPUT)$(SEP)test-a.txt
+	$(CMP) test-a-out.pgn $(OUTPUT)$(SEP)test-a-out.pgn
 
 # -A
 #     + Input file containing games and a file of arguments.
@@ -95,10 +108,10 @@ test-append:
 #       duplicated games in the input files.
 #     - Expected output: test-AA-unique.pgn, test-AA-dupes.pgn
 test-AA:
-	echo "test-A:"
-	$(PGN_EXTRACT) -A$(INPUT)/argslist.txt --quiet
-	cmp test-AA-dupes.pgn $(OUTPUT)/test-AA-dupes.pgn
-	cmp test-AA-unique.pgn $(OUTPUT)/test-AA-unique.pgn
+	echo "test-AA:"
+	$(PGN_EXTRACT) -C -A$(INPUT)$(SEP)argslist.txt --quiet
+	$(CMP) test-AA-dupes.pgn $(OUTPUT)$(SEP)test-AA-dupes.pgn
+	$(CMP) test-AA-unique.pgn $(OUTPUT)$(SEP)test-AA-unique.pgn
 
 # -b
 #     + Input file containing games of different length.
@@ -119,41 +132,41 @@ test-p: test-pl90 test-pu90 test-pu60
 #     - Expected output: 45 moves or more: test-bl45-out.pgn
 test-bl45:
 	echo "test-b:"
-	$(PGN_EXTRACT) -bl45 -otest-bl45-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-bl45-out.pgn $(OUTPUT)/test-bl45-out.pgn
+	$(PGN_EXTRACT) -bl45 -otest-bl45-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-bl45-out.pgn $(OUTPUT)$(SEP)test-bl45-out.pgn
 
 #     - Expected output: 45 moves or less: test-bu45-out.pgn
 test-bu45:
 	echo "test-b:"
-	$(PGN_EXTRACT) -bu45 -otest-bu45-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-bu45-out.pgn $(OUTPUT)/test-bu45-out.pgn
+	$(PGN_EXTRACT) -bu45 -otest-bu45-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-bu45-out.pgn $(OUTPUT)$(SEP)test-bu45-out.pgn
 
 #     - Expected output: exactly 30 moves: test-b30-out.pgn
 test-bu30:
 	echo "test-b:"
-	$(PGN_EXTRACT) -b30 -otest-b30-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-b30-out.pgn $(OUTPUT)/test-b30-out.pgn
+	$(PGN_EXTRACT) -b30 -otest-b30-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-b30-out.pgn $(OUTPUT)$(SEP)test-b30-out.pgn
 
 #     - Expected output: 90 moves or more: test-pl90-out.pgn
 test-pl90:
 	echo "test-p:"
-	$(PGN_EXTRACT) -pl90 -otest-pl90-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-pl90-out.pgn $(OUTPUT)/test-pl90-out.pgn
+	$(PGN_EXTRACT) -pl90 -otest-pl90-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-pl90-out.pgn $(OUTPUT)$(SEP)test-pl90-out.pgn
 
 #     - Expected output: 90 moves or less: test-pu90-out.pgn
 test-pu90:
 	echo "test-p:"
-	$(PGN_EXTRACT) -pu90 -otest-pu90-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-pu90-out.pgn $(OUTPUT)/test-pu90-out.pgn
+	$(PGN_EXTRACT) -pu90 -otest-pu90-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-pu90-out.pgn $(OUTPUT)$(SEP)test-pu90-out.pgn
 
 #     - Expected output: exactly 60 moves: test-p60-out.pgn
 test-pu60:
 	echo "test-p:"
-	$(PGN_EXTRACT) -p60 -otest-p60-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-p60-out.pgn $(OUTPUT)/test-p60-out.pgn
+	$(PGN_EXTRACT) -p60 -otest-p60-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-p60-out.pgn $(OUTPUT)$(SEP)test-p60-out.pgn
 
 # 
-# -c / --checkfile
+# -c $(SEP) --checkfile
 #     + Input files containing games.
 #     - Input file(s): fischer.pgn, petrosian.pgn
 #     - Resulting output should contain matched games that do not already occur in
@@ -161,45 +174,45 @@ test-pu60:
 #     - Expected output: test-c-out.pgn
 test-checkfile:
 	echo "test-checkfile:"
-	$(PGN_EXTRACT) -c$(INPUT)/petrosian.pgn -D -TpPetrosian -otest-c-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-c-out.pgn $(OUTPUT)/test-c-out.pgn
-	$(PGN_EXTRACT) -c$(INPUT)/clist.txt -D -TpPetrosian -otest-c-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-c-out.pgn $(OUTPUT)/test-c-out.pgn
+	$(PGN_EXTRACT) -c$(INPUT)$(SEP)petrosian.pgn -D -TpPetrosian -otest-c-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-c-out.pgn $(OUTPUT)$(SEP)test-c-out.pgn
+	$(PGN_EXTRACT) -c$(INPUT)$(SEP)clist.txt -D -TpPetrosian -otest-c-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-c-out.pgn $(OUTPUT)$(SEP)test-c-out.pgn
 
-# -C / --nocomments
+# -C $(SEP) --nocomments
 #     + Input file containing games with comments
 #     - Input file(s): test-C.pgn
 #     - Resulting output should have all comments removed.
 #     - Expected output: test-CC-out.pgn
 test-nocomments:
 	echo "test-nocomments:"
-	$(PGN_EXTRACT) -C -otest-CC-out.pgn --quiet $(INPUT)/test-C.pgn
-	cmp test-CC-out.pgn $(OUTPUT)/test-CC-out.pgn
+	$(PGN_EXTRACT) -C -otest-CC-out.pgn --quiet $(INPUT)$(SEP)test-C.pgn
+	$(CMP) test-CC-out.pgn $(OUTPUT)$(SEP)test-CC-out.pgn
 
-# -d / --duplicates
+# -d $(SEP) --duplicates
 #     + Input file containing games with duplicates and non-duplicates.
-#     - Input file(s): fischer.pgn, $(INPUT)/petrosian.pgn
+#     - Input file(s): fischer.pgn, $(INPUT)$(SEP)petrosian.pgn
 #     - Resulting output should be files separating the unique and
 #       duplicated games in the input files.
 #     - Expected output: test-d-unique.pgn, test-d-dupes.pgn
 test-duplicates:
 	echo "test-duplicates:"
-	$(PGN_EXTRACT) -dtest-d-dupes.pgn -otest-d-unique.pgn --quiet $(INPUT)/fischer.pgn $(INPUT)/petrosian.pgn
-	cmp test-d-dupes.pgn $(OUTPUT)/test-d-dupes.pgn
-	cmp test-d-unique.pgn $(OUTPUT)/test-d-unique.pgn
+	$(PGN_EXTRACT) -C -dtest-d-dupes.pgn -otest-d-unique.pgn --quiet $(INPUT)$(SEP)fischer.pgn $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-d-dupes.pgn $(OUTPUT)$(SEP)test-d-dupes.pgn
+	$(CMP) test-d-unique.pgn $(OUTPUT)$(SEP)test-d-unique.pgn
 
-# -D / --noduplicates
+# -D $(SEP) --noduplicates
 #     + Input file containing games with duplicates and non-duplicates.
-#     - Input file(s): fischer.pgn, $(INPUT)/petrosian.pgn
+#     - Input file(s): fischer.pgn, $(INPUT)$(SEP)petrosian.pgn
 #     - Resulting output should be a file containing the combined input
 #       with duplicate games removed.
 #     - Expected output: test-DD-unique.pgn
 test-noduplicates:
 	echo "test-noduplicates:"
-	$(PGN_EXTRACT) -D -otest-DD-unique.pgn --quiet $(INPUT)/fischer.pgn $(INPUT)/petrosian.pgn
-	cmp test-DD-unique.pgn $(OUTPUT)/test-DD-unique.pgn
-	$(PGN_EXTRACT) --noduplicates -otest-DD-unique.pgn --quiet $(INPUT)/fischer.pgn $(INPUT)/petrosian.pgn
-	cmp test-DD-unique.pgn $(OUTPUT)/test-DD-unique.pgn
+	$(PGN_EXTRACT) -D -otest-DD-unique.pgn --quiet $(INPUT)$(SEP)fischer.pgn $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-DD-unique.pgn $(OUTPUT)$(SEP)test-DD-unique.pgn
+	$(PGN_EXTRACT) --noduplicates -otest-DD-unique.pgn --quiet $(INPUT)$(SEP)fischer.pgn $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-DD-unique.pgn $(OUTPUT)$(SEP)test-DD-unique.pgn
 
 # -e
 #     + Input file containing games without ECO classifications.
@@ -208,24 +221,24 @@ test-noduplicates:
 #     - Expected output: test-e-out.pgn
 test-e:
 	echo "test-e:"
-	$(PGN_EXTRACT) -e$(ECO_FILE) -otest-e-out.pgn --quiet $(INPUT)/test-e.pgn
-	cmp test-e-out.pgn $(OUTPUT)/test-e-out.pgn
+	$(PGN_EXTRACT) -e$(ECO_FILE) -otest-e-out.pgn --quiet $(INPUT)$(SEP)test-e.pgn
+	$(CMP) test-e-out.pgn $(OUTPUT)$(SEP)test-e-out.pgn
 
 # -E
 #     + Input file containing games.
-#     - Input file(s): test-E.pgn and eco.pgn if -e flag is used.
+#     - Input file(s): test-ucE.pgn and eco.pgn if -e flag is used.
 #     - Resulting output should be separate files for each ECO classification
 #       at the level of the initial letter (A-E).
 #	NB: The test removes existing A-E files first because this option appends
 #	to existing files, which breaks the comparison test otherwise.
 #     - Expected output: A.pgn, B.pgn, E.pgn
 test-EE:
-	echo "test-E:"
-	-rm -f [A-E].pgn
-	$(PGN_EXTRACT) -e$(ECO_FILE) -E1 --quiet $(INPUT)/test-E.pgn
-	cmp A.pgn $(OUTPUT)/A.pgn
-	cmp B.pgn $(OUTPUT)/B.pgn
-	cmp E.pgn $(OUTPUT)/E.pgn
+	echo "test-EE:"
+	-$(RM) [A-E].pgn
+	$(PGN_EXTRACT) -e$(ECO_FILE) -E1 --quiet $(INPUT)$(SEP)test-ucE.pgn
+	$(CMP) A.pgn $(OUTPUT)$(SEP)A.pgn
+	$(CMP) B.pgn $(OUTPUT)$(SEP)B.pgn
+	$(CMP) E.pgn $(OUTPUT)$(SEP)E.pgn
 
 # -f
 #     + Input files containing games.
@@ -234,8 +247,8 @@ test-EE:
 #     - Expected output: test-f-out.pgn
 test-f:
 	echo "test-f:"
-	$(PGN_EXTRACT) --quiet -f$(INPUT)/files.txt -otest-f-out.pgn
-	cmp test-f-out.pgn $(OUTPUT)/test-f-out.pgn
+	$(PGN_EXTRACT) --quiet -f$(INPUT)$(SEP)files.txt -otest-f-out.pgn
+	$(CMP) test-f-out.pgn $(OUTPUT)$(SEP)test-f-out.pgn
 
 # -F:
 #     + Input file containing games without a trailing FEN comment.
@@ -244,21 +257,21 @@ test-f:
 #       the FEN description of the final position.
 #     - Expected output: test-FF-out.pgn
 test-FF:
-	echo "test-F:"
-	$(PGN_EXTRACT) -F -otest-FF-out.pgn --quiet $(INPUT)/test-F.pgn
-	cmp test-FF-out.pgn $(OUTPUT)/test-FF-out.pgn
-	$(PGN_EXTRACT) -Fdiagram -otest-FF-text-out.pgn --quiet $(INPUT)/test-F-text.pgn
-	cmp test-FF-text-out.pgn $(OUTPUT)/test-FF-text-out.pgn
+	echo "test-FF:"
+	$(PGN_EXTRACT) -F -otest-FF-out.pgn --quiet $(INPUT)$(SEP)test-F.pgn
+	$(CMP) test-FF-out.pgn $(OUTPUT)$(SEP)test-FF-out.pgn
+	$(PGN_EXTRACT) -Fdiagram -otest-FF-text-out.pgn --quiet $(INPUT)$(SEP)test-F-text.pgn
+	$(CMP) test-FF-text-out.pgn $(OUTPUT)$(SEP)test-FF-text-out.pgn
 
 # 
-# -h / -? / --help
+# -h $(SEP) -? $(SEP) --help
 #     + No input required.
-#     - Input file(s): N/A
+#     - Input file(s): N$(SEP)A
 #     - Resulting output should be a description of how to use pgn-extract
-#     - Expected output: N/A
+#     - Expected output: N$(SEP)A
 # Also:
-# 	../pgn-extract -?
-# 	../pgn-extract --help
+# 	..$(SEP)pgn-extract -?
+# 	..$(SEP)pgn-extract --help
 test-h:
 	echo "test-h:"
 	-$(PGN_EXTRACT) -h
@@ -270,9 +283,9 @@ test-h:
 #     - Expected output: log.txt
 test-l:
 	echo "test-l:"
-	$(PGN_EXTRACT) -llog.txt -otest-l-out.pgn $(INPUT)/fischer.pgn
-	cmp log.txt $(OUTPUT)/log.txt
-	cmp test-l-out.pgn $(OUTPUT)/test-l-out.pgn
+	$(PGN_EXTRACT) -llog.txt -otest-l-out.pgn $(INPUT)$(SEP)fischer.pgn
+	$(CMP) log.txt $(OUTPUT)$(SEP)log.txt
+	$(CMP) test-l-out.pgn $(OUTPUT)$(SEP)test-l-out.pgn
 
 # -L
 #     + Input file containing games.
@@ -281,20 +294,20 @@ test-l:
 #       logs from two runs of pgn-extract.
 #     - Expected output: log.txt
 test-LL:
-	echo "test-L:"
-	$(PGN_EXTRACT) -lLLog.txt -r $(INPUT)/test-L1.pgn
-	$(PGN_EXTRACT) -LLLog.txt -r $(INPUT)/test-L2.pgn
-	cmp LLog.txt $(OUTPUT)/LLog.txt
+	echo "test-LL:"
+	$(PGN_EXTRACT) -lLLog.txt -r $(INPUT)$(SEP)test-L1.pgn
+	$(PGN_EXTRACT) -LLLog.txt -r $(INPUT)$(SEP)test-L2.pgn
+	$(CMP) LLog.txt $(OUTPUT)$(SEP)LLog.txt
 
-# -M / --checkmate
+# -M $(SEP) --checkmate
 #     + Input file containing games.
 #     - Input file(s): test-checkmate.pgn
 #     - Resulting output should contain only those games that end in checkmate.
 #     - Expected output: test-checkmate-out.pgn
 test-checkmate:
 	echo "test-checkmate:"
-	$(PGN_EXTRACT) --checkmate -otest-checkmate-out.pgn --quiet $(INPUT)/test-checkmate.pgn
-	cmp test-checkmate-out.pgn $(OUTPUT)/test-checkmate-out.pgn
+	$(PGN_EXTRACT) --checkmate -otest-checkmate-out.pgn --quiet $(INPUT)$(SEP)test-checkmate.pgn
+	$(CMP) test-checkmate-out.pgn $(OUTPUT)$(SEP)test-checkmate-out.pgn
 
 # -n
 #     + Input file containing games.
@@ -304,32 +317,38 @@ test-checkmate:
 #     - Expected output: test-n-matched.pgn, test-n-unmatched.pgn
 test-n:
 	echo "test-n:"
-	$(PGN_EXTRACT) -TpFischer -otest-n-matched.pgn -ntest-n-unmatched.pgn --quiet $(INPUT)/petrosian.pgn
-	cmp test-n-matched.pgn $(OUTPUT)/test-n-matched.pgn
-	cmp test-n-unmatched.pgn $(OUTPUT)/test-n-unmatched.pgn
+	$(PGN_EXTRACT) -TpFischer -otest-n-matched.pgn -ntest-n-unmatched.pgn --quiet $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-n-matched.pgn $(OUTPUT)$(SEP)test-n-matched.pgn
+	$(CMP) test-n-unmatched.pgn $(OUTPUT)$(SEP)test-n-unmatched.pgn
 
-# -N / --nonags
+# -N $(SEP) --nonags
 #     + Input file containing games with NAGs.
 #     - Input file(s): test-N.pgn
 #     - Resulting output should have all NAGs removed.
 #     - Expected output: test-NN-out.pgn
 test-NN:
-	echo "test-N:"
-	$(PGN_EXTRACT) -N -otest-NN-out.pgn --quiet $(INPUT)/test-N.pgn
-	cmp test-NN-out.pgn $(OUTPUT)/test-NN-out.pgn
+	echo "test-NN:"
+	$(PGN_EXTRACT) -N -otest-NN-out.pgn --quiet $(INPUT)$(SEP)test-N.pgn
+	$(CMP) test-NN-out.pgn $(OUTPUT)$(SEP)test-NN-out.pgn
+#       Comments after multiple nags.
+	$(PGN_EXTRACT) -otest-nagcomments-out.pgn --quiet $(INPUT)$(SEP)test-nagcomments.pgn
+#       Deleting NAGs with comments after multiple nags.
+	$(PGN_EXTRACT) -N -atest-nagcomments-out.pgn --quiet $(INPUT)$(SEP)test-nagcomments.pgn
+	$(CMP) test-nagcomments-out.pgn $(OUTPUT)$(SEP)test-nagcomments-out.pgn
+	$(CMP) test-nagcomments-out.pgn $(OUTPUT)$(SEP)test-nagcomments-out.pgn
 
 # 
-# -o / --output
+# -o $(SEP) --output
 #     + Input file containing games in any accepted format.
 #     - Input file(s): test-o.txt
 #     - Resulting output should contain the input game formatted in PGN.
 #     - Expected output: test-o-out.pgn
 test-output:
 	echo "test-output:"
-	$(PGN_EXTRACT) -otest-o-out.pgn --quiet $(INPUT)/test-o.txt
-	cmp test-o-out.pgn $(OUTPUT)/test-o-out.pgn
-	$(PGN_EXTRACT) --output test-o-out.pgn --quiet $(INPUT)/test-o.txt
-	cmp test-o-out.pgn $(OUTPUT)/test-o-out.pgn
+	$(PGN_EXTRACT) -otest-o-out.pgn --quiet $(INPUT)$(SEP)test-o.txt
+	$(CMP) test-o-out.pgn $(OUTPUT)$(SEP)test-o-out.pgn
+	$(PGN_EXTRACT) --output test-o-out.pgn --quiet $(INPUT)$(SEP)test-o.txt
+	$(CMP) test-o-out.pgn $(OUTPUT)$(SEP)test-o-out.pgn
 
 # -P
 #     + Input file containing games with different sequences for the same
@@ -339,9 +358,9 @@ test-output:
 #       the sequence specified in Pvars.txt
 #     - Expected output: test-PP-out.pgn
 test-PP:
-	echo "test-P:"
-	$(PGN_EXTRACT) -P -v$(INPUT)/Pvars.txt -otest-PP-out.pgn --quiet $(INPUT)/test-P.pgn
-	cmp test-PP-out.pgn $(OUTPUT)/test-PP-out.pgn
+	echo "test-PP:"
+	$(PGN_EXTRACT) -P -v$(INPUT)$(SEP)Pvars.txt -otest-PP-out.pgn --quiet $(INPUT)$(SEP)test-P.pgn
+	$(CMP) test-PP-out.pgn $(OUTPUT)$(SEP)test-PP-out.pgn
 
 # -r
 #     + Input file containing games in any accepted format.
@@ -351,8 +370,8 @@ test-PP:
 #     - Expected output: test-r-log.txt
 test-r:
 	echo "test-r:"
-	$(PGN_EXTRACT) -r -ltest-r-log.txt $(INPUT)/test-r.txt
-	cmp test-r-log.txt $(OUTPUT)/test-r-log.txt
+	$(PGN_EXTRACT) -r -ltest-r-log.txt $(INPUT)$(SEP)test-r.txt
+#       $(CMP) test-r-log.txt $(OUTPUT)$(SEP)test-r-log.txt
 
 # -R
 #     + Input file containing games.
@@ -361,9 +380,9 @@ test-r:
 #       the order specified in roster.txt
 #     - Expected output: test-R-out.pgn
 test-RR:
-	echo "test-R:"
-	$(PGN_EXTRACT) -R$(INPUT)/roster.txt --output test-RR-out.pgn --quiet $(INPUT)/test-R.pgn
-	cmp test-RR-out.pgn $(OUTPUT)/test-RR-out.pgn
+	echo "test-RR:"
+	$(PGN_EXTRACT) -R$(INPUT)$(SEP)roster.txt --output test-RR-out.pgn --quiet $(INPUT)$(SEP)test-R.pgn
+	$(CMP) test-RR-out.pgn $(OUTPUT)$(SEP)test-RR-out.pgn
 
 # -s
 #     + Input file containing games.
@@ -372,20 +391,20 @@ test-RR:
 #     - Expected output: test-s-out.pgn
 test-s:
 	echo "test-s:"
-	$(PGN_EXTRACT) -s -o test-s-out.pgn $(INPUT)/test-s.pgn
-	cmp test-s-out.pgn $(OUTPUT)/test-s-out.pgn
+	$(PGN_EXTRACT) -s -o test-s-out.pgn $(INPUT)$(SEP)test-s.pgn
+	$(CMP) test-s-out.pgn $(OUTPUT)$(SEP)test-s-out.pgn
 
 # -S
 #     + Input file containing games whose players' names have slight
 #       sound variations from anglesized versions.
-#     - Input file(s): test-S.pgn
+#     - Input file(s): test-ucS.pgn
 #     - Resulting output should be games that match by ignoring slight
 #       soundex differences.
-#     - Expected output: test-S-out.pgn
+#     - Expected output: test-SS-out.pgn
 test-SS:
-	echo "test-S:"
-	$(PGN_EXTRACT) -S -TpPetrosian -otest-SS-out.pgn --quiet $(INPUT)/test-S.pgn
-	cmp test-SS-out.pgn $(OUTPUT)/test-SS-out.pgn
+	echo "test-SS:"
+	$(PGN_EXTRACT) -S -TpPetrosian -otest-SS-out.pgn --quiet $(INPUT)$(SEP)test-ucS.pgn
+	$(CMP) test-SS-out.pgn $(OUTPUT)$(SEP)test-SS-out.pgn
 
 # -t
 #     + Input file containing games and a file of tag criteria.
@@ -395,10 +414,10 @@ test-SS:
 #     - Expected output: test-t-out.pgn
 test-t:
 	echo "test-t:"
-	$(PGN_EXTRACT) -t$(INPUT)/taglist.txt -otest-t-out.pgn --quiet $(INPUT)/test-t.pgn
-	cmp test-t-out.pgn $(OUTPUT)/test-t-out.pgn
-	$(PGN_EXTRACT) -t$(INPUT)/test-tFEN.txt -otest-tFEN-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-tFEN-out.pgn $(OUTPUT)/test-tFEN-out.pgn
+	$(PGN_EXTRACT) -t$(INPUT)$(SEP)taglist.txt -otest-t-out.pgn --quiet $(INPUT)$(SEP)test-t.pgn
+	$(CMP) test-t-out.pgn $(OUTPUT)$(SEP)test-t-out.pgn
+	$(PGN_EXTRACT) -t$(INPUT)$(SEP)test-tFEN.txt -otest-tFEN-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-tFEN-out.pgn $(OUTPUT)$(SEP)test-tFEN-out.pgn
 
 # -T
 #     + Input file containing games with tag information.
@@ -409,34 +428,34 @@ test-t:
 #                        test-Tdd-out.pgn test-Te-out.pgn, test-Tp-out.pgn,
 #                        test-Tw-out.pgn
 test-TT:
-	echo "test-T:"
-	$(PGN_EXTRACT) -Td1970 -otest-TTd-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-TTd-out.pgn $(OUTPUT)/test-TTd-out.pgn
-	$(PGN_EXTRACT) -Td1960 -Td1962 -otest-TTdd-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-TTdd-out.pgn $(OUTPUT)/test-TTdd-out.pgn
-	$(PGN_EXTRACT) -TbPetrosian -otest-TTb-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-TTb-out.pgn $(OUTPUT)/test-TTb-out.pgn
-	$(PGN_EXTRACT) -e$(ECO_FILE) -TeB14 -otest-Te-out.pgn --quiet $(INPUT)/fischer.pgn
-	$(PGN_EXTRACT) -TpPetrosian -otest-TTp-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-TTp-out.pgn $(OUTPUT)/test-TTp-out.pgn
-	$(PGN_EXTRACT) -Tr0-1 -otest-TTr-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-TTr-out.pgn $(OUTPUT)/test-TTr-out.pgn
-	$(PGN_EXTRACT) -TwFischer -otest-TTw-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-TTw-out.pgn $(OUTPUT)/test-TTw-out.pgn
-	$(PGN_EXTRACT) -TaBarnes -otest-TTa-out.pgn --quiet $(INPUT)/test-Ta.pgn
-	cmp test-TTa-out.pgn $(OUTPUT)/test-TTa-out.pgn
+	echo "test-TT:"
+	$(PGN_EXTRACT) -Td1970 -otest-TTd-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-TTd-out.pgn $(OUTPUT)$(SEP)test-TTd-out.pgn
+	$(PGN_EXTRACT) -Td1960 -Td1962 -otest-TTdd-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-TTdd-out.pgn $(OUTPUT)$(SEP)test-TTdd-out.pgn
+	$(PGN_EXTRACT) -TbPetrosian -otest-TTb-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-TTb-out.pgn $(OUTPUT)$(SEP)test-TTb-out.pgn
+	$(PGN_EXTRACT) -e$(ECO_FILE) -TeB14 -otest-Te-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(PGN_EXTRACT) -TpPetrosian -otest-TTp-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-TTp-out.pgn $(OUTPUT)$(SEP)test-TTp-out.pgn
+	$(PGN_EXTRACT) -Tr0-1 -otest-TTr-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-TTr-out.pgn $(OUTPUT)$(SEP)test-TTr-out.pgn
+	$(PGN_EXTRACT) -TwFischer -otest-TTw-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-TTw-out.pgn $(OUTPUT)$(SEP)test-TTw-out.pgn
+	$(PGN_EXTRACT) -TaBarnes -otest-TTa-out.pgn --quiet $(INPUT)$(SEP)test-Ta.pgn
+	$(CMP) test-TTa-out.pgn $(OUTPUT)$(SEP)test-TTa-out.pgn
 
-# -U / --nounique
+# -U $(SEP) --nounique
 #     + Input file containing games with duplicates and non-duplicates.
 #     - Input file(s): fischer.pgn, petrosian.pgn
 #     - Resulting output should be a file containing just the duplicate games.
 #     - Expected output: test-U-unique.pgn
 test-nounique:
 	echo "test-nounique:"
-	$(PGN_EXTRACT) -U -otest-UU-unique.pgn --quiet $(INPUT)/fischer.pgn $(INPUT)/petrosian.pgn
-	cmp test-UU-unique.pgn $(OUTPUT)/test-UU-unique.pgn
-	$(PGN_EXTRACT) --nounique -otest-UU-unique.pgn --quiet $(INPUT)/fischer.pgn $(INPUT)/petrosian.pgn
-	cmp test-UU-unique.pgn $(OUTPUT)/test-UU-unique.pgn
+	$(PGN_EXTRACT) -U -otest-UU-unique.pgn --quiet $(INPUT)$(SEP)fischer.pgn $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-UU-unique.pgn $(OUTPUT)$(SEP)test-UU-unique.pgn
+	$(PGN_EXTRACT) --nounique -otest-UU-unique.pgn --quiet $(INPUT)$(SEP)fischer.pgn $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-UU-unique.pgn $(OUTPUT)$(SEP)test-UU-unique.pgn
 
 # -v
 #     + Input file containing games.
@@ -446,8 +465,8 @@ test-nounique:
 #     - Expected output: test-v-out.pgn
 test-v:
 	echo "test-v:"
-	$(PGN_EXTRACT) -v$(INPUT)/vvars.txt -otest-v-out.pgn --quiet $(INPUT)/najdorf.pgn
-	cmp test-v-out.pgn $(OUTPUT)/test-v-out.pgn
+	$(PGN_EXTRACT) -v$(INPUT)$(SEP)vvars.txt -otest-v-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(CMP) test-v-out.pgn $(OUTPUT)$(SEP)test-v-out.pgn
 
 # -V
 #     + Input file containing games with variations
@@ -455,11 +474,11 @@ test-v:
 #     - Resulting output should have all variations removed.
 #     - Expected output: test-V-out.pgn
 test-VV:
-	echo "test-V:"
-	$(PGN_EXTRACT) -V -otest-VV-out.pgn --quiet $(INPUT)/test-V.pgn
-	cmp test-VV-out.pgn $(OUTPUT)/test-VV-out.pgn
+	echo "test-VV:"
+	$(PGN_EXTRACT) -V -otest-VV-out.pgn --quiet $(INPUT)$(SEP)test-V.pgn
+	$(CMP) test-VV-out.pgn $(OUTPUT)$(SEP)test-VV-out.pgn
 
-# -w / --linelength
+# -w $(SEP) --linelength
 #     + Input file containing games.
 #     - Input file(s): test-w.pgn
 #     - Resulting output Games formatted up to the specified line length.
@@ -467,23 +486,23 @@ test-VV:
 #     - Expected output: test-w60-out.pgn, test-w75-out.pgn, test-w1000-out.pgn
 test-linelength:
 	echo "test-linelength:"
-	$(PGN_EXTRACT) -w60 -otest-w60-out.pgn --quiet $(INPUT)/test-w.pgn
-	cmp test-w60-out.pgn $(OUTPUT)/test-w60-out.pgn
-	$(PGN_EXTRACT) -w75 -otest-w75-out.pgn --quiet $(INPUT)/test-w.pgn
-	cmp test-w75-out.pgn $(OUTPUT)/test-w75-out.pgn
-	$(PGN_EXTRACT) -w1000 -otest-w1000-out.pgn --quiet $(INPUT)/test-w.pgn
-	cmp test-w1000-out.pgn $(OUTPUT)/test-w1000-out.pgn
+	$(PGN_EXTRACT) -w60 -otest-w60-out.pgn --quiet $(INPUT)$(SEP)test-w.pgn
+	$(CMP) test-w60-out.pgn $(OUTPUT)$(SEP)test-w60-out.pgn
+	$(PGN_EXTRACT) -w75 -otest-w75-out.pgn --quiet $(INPUT)$(SEP)test-w.pgn
+	$(CMP) test-w75-out.pgn $(OUTPUT)$(SEP)test-w75-out.pgn
+	$(PGN_EXTRACT) -w1000 -otest-w1000-out.pgn --quiet $(INPUT)$(SEP)test-w.pgn
+	$(CMP) test-w1000-out.pgn $(OUTPUT)$(SEP)test-w1000-out.pgn
 
-	$(PGN_EXTRACT) --linelength 60 -otest-w60-out.pgn --quiet $(INPUT)/test-w.pgn
-	cmp test-w60-out.pgn $(OUTPUT)/test-w60-out.pgn
-	$(PGN_EXTRACT) --linelength 75 -otest-w75-out.pgn --quiet $(INPUT)/test-w.pgn
-	cmp test-w75-out.pgn $(OUTPUT)/test-w75-out.pgn
-	$(PGN_EXTRACT) --linelength 1000 -otest-w1000-out.pgn --quiet $(INPUT)/test-w.pgn
-	cmp test-w1000-out.pgn $(OUTPUT)/test-w1000-out.pgn
+	$(PGN_EXTRACT) --linelength 60 -otest-w60-out.pgn --quiet $(INPUT)$(SEP)test-w.pgn
+	$(CMP) test-w60-out.pgn $(OUTPUT)$(SEP)test-w60-out.pgn
+	$(PGN_EXTRACT) --linelength 75 -otest-w75-out.pgn --quiet $(INPUT)$(SEP)test-w.pgn
+	$(CMP) test-w75-out.pgn $(OUTPUT)$(SEP)test-w75-out.pgn
+	$(PGN_EXTRACT) --linelength 1000 -otest-w1000-out.pgn --quiet $(INPUT)$(SEP)test-w.pgn
+	$(CMP) test-w1000-out.pgn $(OUTPUT)$(SEP)test-w1000-out.pgn
 
 # -W
 #     + Input file containing games.
-#     - Input file(s): test-W.pgn
+#     - Input file(s): test-ucW.pgn
 #     - Resulting output should be games formatted in the specified notation:
 #       halg (hyphenated long algebraic), lalg (non-hyphenated long algebraic),
 #       elalg (enhanced long algebraic), xlalg (enhanced with capture info),
@@ -493,19 +512,21 @@ test-linelength:
 #                        test-WWelalg-out.pgn, test-WWdeutsch-out.pgn,
 #                        test-WWuci-out.pgn
 test-WW:
-	echo "test-W:"
-	$(PGN_EXTRACT) -Whalg -otest-WWhalg-out.pgn --quiet $(INPUT)/test-W.pgn
-	cmp test-WWhalg-out.pgn $(OUTPUT)/test-WWhalg-out.pgn
-	$(PGN_EXTRACT) -Wlalg -otest-WWlalg-out.pgn --quiet $(INPUT)/test-W.pgn
-	cmp test-WWlalg-out.pgn $(OUTPUT)/test-WWlalg-out.pgn
-	$(PGN_EXTRACT) -Welalg -otest-WWelalg-out.pgn --quiet $(INPUT)/test-W.pgn
-	cmp test-WWelalg-out.pgn $(OUTPUT)/test-WWelalg-out.pgn
-	$(PGN_EXTRACT) -Wxlalg -otest-WWxlalg-out.pgn --quiet $(INPUT)/test-W.pgn
-	cmp test-WWxlalg-out.pgn $(OUTPUT)/test-WWxlalg-out.pgn
-	$(PGN_EXTRACT) -WsanBSLTDK -otest-WWdeutsch-out.pgn --quiet $(INPUT)/test-W.pgn
-	cmp test-WWdeutsch-out.pgn $(OUTPUT)/test-WWdeutsch-out.pgn
-	$(PGN_EXTRACT) -Wuci -otest-WWuci-out.pgn --quiet $(INPUT)/test-W.pgn
-	cmp test-WWuci-out.pgn $(OUTPUT)/test-WWuci-out.pgn
+	echo "test-WW:"
+	$(PGN_EXTRACT) -Whalg -otest-WWhalg-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWhalg-out.pgn $(OUTPUT)$(SEP)test-WWhalg-out.pgn
+	$(PGN_EXTRACT) -Wlalg -otest-WWlalg-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWlalg-out.pgn $(OUTPUT)$(SEP)test-WWlalg-out.pgn
+	$(PGN_EXTRACT) -Welalg -otest-WWelalg-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWelalg-out.pgn $(OUTPUT)$(SEP)test-WWelalg-out.pgn
+	$(PGN_EXTRACT) -Wxlalg -otest-WWxlalg-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWxlalg-out.pgn $(OUTPUT)$(SEP)test-WWxlalg-out.pgn
+	$(PGN_EXTRACT) -WsanBSLTDK -otest-WWdeutsch-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWdeutsch-out.pgn $(OUTPUT)$(SEP)test-WWdeutsch-out.pgn
+	$(PGN_EXTRACT) -Wuci -otest-WWuci-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWuci-out.pgn $(OUTPUT)$(SEP)test-WWuci-out.pgn
+	$(PGN_EXTRACT) -Wepd -otest-WWepd-out.pgn --quiet $(INPUT)$(SEP)test-ucW.pgn
+	$(CMP) test-WWepd-out.pgn $(OUTPUT)$(SEP)test-WWepd-out.pgn
 
 # -x
 #     + Input file containing games.
@@ -515,21 +536,32 @@ test-WW:
 #     - Expected output: test-x-out.pgn
 test-x:
 	echo "test-x:"
-	$(PGN_EXTRACT) -x$(INPUT)/xvars.txt -otest-x-out.pgn --quiet $(INPUT)/najdorf.pgn
-	cmp test-x-out.pgn $(OUTPUT)/test-x-out.pgn
-	$(PGN_EXTRACT) -x$(INPUT)/xvars.txt -otest-x-out.pgn -ntest-xn-out.pgn --quiet $(INPUT)/najdorf.pgn
-	cmp test-xn-out.pgn $(OUTPUT)/test-xn-out.pgn
+	$(PGN_EXTRACT) -x$(INPUT)$(SEP)xvars.txt -otest-x-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(CMP) test-x-out.pgn $(OUTPUT)$(SEP)test-x-out.pgn
+	$(PGN_EXTRACT) -x$(INPUT)$(SEP)xvars.txt -otest-x-out.pgn -ntest-xn-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(CMP) test-xn-out.pgn $(OUTPUT)$(SEP)test-xn-out.pgn
+
+# -y
+#     + Input file containing games.
+#     - Input file(s): fischer.pgn, zmatch.txt
+#     - Resulting output should be games whose material balance matches that
+#       specified in ymatch.txt
+#     - Expected output: test-y-out.pgn
+test-y:
+	echo "test-y:"
+	$(PGN_EXTRACT) -y$(INPUT)$(SEP)ymatch.txt --markmatches MATCH -otest-y-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-y-out.pgn $(OUTPUT)$(SEP)test-y-out.pgn
 
 # -z
 #     + Input file containing games.
-#     - Input file(s): petrosian.pgn, zmatch.txt
+#     - Input file(s): fischer.pgn, zmatch.txt
 #     - Resulting output should be games whose material balance matches that
 #       specified in zmatch.txt
 #     - Expected output: test-z-out.pgn
 test-z:
 	echo "test-z:"
-	$(PGN_EXTRACT) -z$(INPUT)/zmatch.txt -otest-z-out.pgn --quiet $(INPUT)/petrosian.pgn
-	cmp test-z-out.pgn $(OUTPUT)/test-z-out.pgn
+	$(PGN_EXTRACT) -z$(INPUT)$(SEP)zmatch.txt -otest-z-out.pgn --markmatches MATCH --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-z-out.pgn $(OUTPUT)$(SEP)test-z-out.pgn
 
 # -Z
 #     + Input file containing games with duplicates and non-duplicates.
@@ -538,10 +570,10 @@ test-z:
 #       duplicated games in the input files.
 #     - Expected output: test-ZZ-unique.pgn, test-ZZ-dupes.pgn
 test-ZZ:
-	echo "test-Z:"
-	$(PGN_EXTRACT) -Z -dtest-ZZ-dupes.pgn -otest-ZZ-unique.pgn --quiet $(INPUT)/fischer.pgn $(INPUT)/petrosian.pgn
-	cmp test-ZZ-dupes.pgn $(OUTPUT)/test-ZZ-dupes.pgn
-	cmp test-ZZ-unique.pgn $(OUTPUT)/test-ZZ-unique.pgn
+	echo "test-ZZ:"
+	$(PGN_EXTRACT) -C -Z -dtest-ZZ-dupes.pgn -otest-ZZ-unique.pgn --quiet $(INPUT)$(SEP)fischer.pgn $(INPUT)$(SEP)petrosian.pgn
+	$(CMP) test-ZZ-dupes.pgn $(OUTPUT)$(SEP)test-ZZ-dupes.pgn
+	$(CMP) test-ZZ-unique.pgn $(OUTPUT)$(SEP)test-ZZ-unique.pgn
 
 # -#
 #     + Input file containing games.
@@ -551,9 +583,13 @@ test-ZZ:
 #     - Expected output: 1.pgn, 2.pgn
 test-hash:
 	echo "test-hash:"
-	$(PGN_EXTRACT) -#20 --quiet $(INPUT)/test-hash.pgn
-	cmp 1.pgn $(OUTPUT)/1.pgn
-	cmp 2.pgn $(OUTPUT)/2.pgn
+	$(PGN_EXTRACT) -#20 --quiet $(INPUT)$(SEP)test-hash.pgn
+	$(CMP) 1.pgn $(OUTPUT)$(SEP)1.pgn
+	$(CMP) 2.pgn $(OUTPUT)$(SEP)2.pgn
+
+	$(PGN_EXTRACT) -#20,10 --quiet $(INPUT)$(SEP)test-hash.pgn
+	$(CMP) 10.pgn $(OUTPUT)$(SEP)10.pgn
+	$(CMP) 11.pgn $(OUTPUT)$(SEP)11.pgn
 
 # --evaluation
 #     + Input file containing games.
@@ -563,8 +599,8 @@ test-hash:
 #     - Expected output: test-evaluation-out.pgn
 test-evaluation:
 	echo "test-evaluation:"
-	$(PGN_EXTRACT) --evaluation -otest-evaluation-out.pgn --quiet $(INPUT)/test-evaluation.pgn
-	cmp test-evaluation-out.pgn $(OUTPUT)/test-evaluation-out.pgn
+	$(PGN_EXTRACT) --evaluation -otest-evaluation-out.pgn --quiet $(INPUT)$(SEP)test-evaluation.pgn
+	$(CMP) test-evaluation-out.pgn $(OUTPUT)$(SEP)test-evaluation-out.pgn
 
 # --fencomments
 #     + Input file containing games.
@@ -574,8 +610,8 @@ test-evaluation:
 #     - Expected output: test-fencomments-out.pgn
 test-fencomments:
 	echo "test-fencomments:"
-	$(PGN_EXTRACT) --fencomments -otest-fencomments-out.pgn --quiet $(INPUT)/test-fencomments.pgn
-	cmp test-fencomments-out.pgn $(OUTPUT)/test-fencomments-out.pgn
+	$(PGN_EXTRACT) --fencomments -otest-fencomments-out.pgn --quiet $(INPUT)$(SEP)test-fencomments.pgn
+	$(CMP) test-fencomments-out.pgn $(OUTPUT)$(SEP)test-fencomments-out.pgn
 
 # --markmatches
 #     + Input file containing games.
@@ -586,19 +622,29 @@ test-fencomments:
 #     - Expected output: test-markmatches-out.pgn
 test-markmatches:
 	echo "test-markmatches:"
-	$(PGN_EXTRACT) --markmatches MATCH -x$(INPUT)/xvars.txt -otest-markmatches-out.pgn --quiet $(INPUT)/najdorf.pgn
-	cmp test-markmatches-out.pgn $(OUTPUT)/test-markmatches-out.pgn
+	$(PGN_EXTRACT) --markmatches MATCH -x$(INPUT)$(SEP)xvars.txt -otest-markmatches-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(CMP) test-markmatches-out.pgn $(OUTPUT)$(SEP)test-markmatches-out.pgn
+
+# --nestedcomments
+#     + Input file containing games.
+#     - Input file(s): nested-comment.pgn
+#     - Resulting output should have retained the nested comment.
+#     - Expected output: test-nestedcomments-out.pgn
+test-nestedcomments:
+	echo "test-nestedcomments:"
+	$(PGN_EXTRACT) --nestedcomments -otest-nestedcomments-out.pgn --quiet $(INPUT)$(SEP)nested-comment.pgn
+	$(CMP) test-nestedcomments-out.pgn $(OUTPUT)$(SEP)test-nestedcomments-out.pgn
 
 # --nochecks
 #     + Input file containing games with moves involving moves that give check
-#       and/or mate.
+#       and$(SEP)or mate.
 #     - Input file(s): test-nochecks.pgn
 #     - Resulting output should contain games with no check indicators after moves.
 #     - Expected output: test-nochecks-out.pgn
 test-nochecks:
 	echo "test-nochecks:"
-	$(PGN_EXTRACT) --nochecks -otest-nochecks-out.pgn --quiet $(INPUT)/test-nochecks.pgn
-	cmp test-nochecks-out.pgn $(OUTPUT)/test-nochecks-out.pgn
+	$(PGN_EXTRACT) --nochecks -otest-nochecks-out.pgn --quiet $(INPUT)$(SEP)test-nochecks.pgn
+	$(CMP) test-nochecks-out.pgn $(OUTPUT)$(SEP)test-nochecks-out.pgn
 
 # --nomovenumbers
 #     + Input file containing games with move numbers.
@@ -607,8 +653,8 @@ test-nochecks:
 #     - Expected output: test-nomovenumbers-out.pgn
 test-nomovenumbers:
 	echo "test-nomovenumbers:"
-	$(PGN_EXTRACT) -otest-nomovenumbers-out.pgn --nomovenumbers --quiet $(INPUT)/test-nomovenumbers.pgn
-	cmp test-nomovenumbers-out.pgn $(OUTPUT)/test-nomovenumbers-out.pgn
+	$(PGN_EXTRACT) -otest-nomovenumbers-out.pgn --nomovenumbers --quiet $(INPUT)$(SEP)test-nomovenumbers.pgn
+	$(CMP) test-nomovenumbers-out.pgn $(OUTPUT)$(SEP)test-nomovenumbers-out.pgn
 
 # --noresults
 #     + Input file containing games with results.
@@ -617,8 +663,8 @@ test-nomovenumbers:
 #     - Expected output: test-noresults-out.pgn
 test-noresults:
 	echo "test-noresults:"
-	$(PGN_EXTRACT) -otest-noresults-out.pgn --noresults --quiet $(INPUT)/test-noresults.pgn
-	cmp test-noresults-out.pgn $(OUTPUT)/test-noresults-out.pgn
+	$(PGN_EXTRACT) -otest-noresults-out.pgn --noresults --quiet $(INPUT)$(SEP)test-noresults.pgn
+	$(CMP) test-noresults-out.pgn $(OUTPUT)$(SEP)test-noresults-out.pgn
 
 # --notags
 #     + Input file containing games with tag information.
@@ -627,8 +673,8 @@ test-noresults:
 #     - Expected output: test-notags-out.pgn
 test-notags:
 	echo "test-notags:"
-	$(PGN_EXTRACT) -otest-notags-out.pgn --notags --quiet $(INPUT)/test-notags.pgn
-	cmp test-notags-out.pgn $(OUTPUT)/test-notags-out.pgn
+	$(PGN_EXTRACT) -otest-notags-out.pgn --notags --quiet $(INPUT)$(SEP)test-notags.pgn
+	$(CMP) test-notags-out.pgn $(OUTPUT)$(SEP)test-notags-out.pgn
 
 # --plylimit
 #     + Input file containing games.
@@ -638,8 +684,22 @@ test-notags:
 #     - Expected output: test-plylimit-out.pgn
 test-plylimit:
 	echo "test-plylimit:"
-	$(PGN_EXTRACT) --plylimit 10 -otest-plylimit-out.pgn --quiet $(INPUT)/test-plylimit.pgn
-	cmp test-plylimit-out.pgn $(OUTPUT)/test-plylimit-out.pgn
+	$(PGN_EXTRACT) --plylimit 10 -otest-plylimit-out.pgn --quiet $(INPUT)$(SEP)test-plylimit.pgn
+	$(CMP) test-plylimit-out.pgn $(OUTPUT)$(SEP)test-plylimit-out.pgn
+
+# --dropply
+#     + Input file containing games.
+#     - Input file(s): najdorf.pgn
+#     - Resulting output should contain games whose number of moves (plies) are
+#       have been reduced by the given number from the beginning or end.
+#     - Expected output: test-dropply-out.pgn
+test-dropply:
+	echo "test-dropply:"
+	$(PGN_EXTRACT) --dropply 10 -otest-dropply-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(PGN_EXTRACT) --dropply 11 -atest-dropply-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(PGN_EXTRACT) --dropply -1 -atest-dropply-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(PGN_EXTRACT) --dropply -2 -atest-dropply-out.pgn --quiet $(INPUT)$(SEP)najdorf.pgn
+	$(CMP) test-dropply-out.pgn $(OUTPUT)$(SEP)test-dropply-out.pgn
 
 # --selectonly
 #     + Input file containing games.
@@ -648,8 +708,8 @@ test-plylimit:
 #     - Expected output: test-selectonly-out.pgn
 test-selectonly:
 	echo "test-selectonly:"
-	$(PGN_EXTRACT) -TpPetrosian --selectonly 2,3 -otest-selectonly-out.pgn --quiet $(INPUT)/test-selectonly.pgn
-	cmp test-selectonly-out.pgn $(OUTPUT)/test-selectonly-out.pgn
+	$(PGN_EXTRACT) -TpPetrosian --selectonly 2,3 -otest-selectonly-out.pgn --quiet $(INPUT)$(SEP)test-selectonly.pgn
+	$(CMP) test-selectonly-out.pgn $(OUTPUT)$(SEP)test-selectonly-out.pgn
 
 # --skipmatching
 #     + Input file containing games.
@@ -658,8 +718,19 @@ test-selectonly:
 #     - Expected output: test-selectonly-out.pgn
 test-skipmatching:
 	echo "test-skipmatching:"
-	$(PGN_EXTRACT) -TpKeres --skipmatching 1,2 -otest-skipmatching-out.pgn --quiet $(INPUT)/fischer.pgn
-	cmp test-skipmatching-out.pgn $(OUTPUT)/test-skipmatching-out.pgn
+	$(PGN_EXTRACT) -TpKeres --skipmatching 1,2 -otest-skipmatching-out.pgn --quiet $(INPUT)$(SEP)fischer.pgn
+	$(CMP) test-skipmatching-out.pgn $(OUTPUT)$(SEP)test-skipmatching-out.pgn
+
+# --splitvariants
+#     + Input file containing games.
+#     - Input file(s): test-splitvariants.pgn
+#     - Resulting output should contain a separate game
+#       for every variation in the input file.
+#     - Expected output: test-splitvariants-out.pgn
+test-splitvariants:
+	echo "test-splitvariants:"
+	$(PGN_EXTRACT) --splitvariants -otest-splitvariants-out.pgn --quiet $(INPUT)$(SEP)test-splitvariants.pgn
+	$(CMP) test-splitvariants-out.pgn $(OUTPUT)$(SEP)test-splitvariants-out.pgn
 
 # --stalemate
 #     + Input file containing games.
@@ -668,8 +739,8 @@ test-skipmatching:
 #     - Expected output: test-stalemate-out.pgn
 test-stalemate:
 	echo "test-stalemate:"
-	$(PGN_EXTRACT) --stalemate -otest-stalemate-out.pgn --quiet $(INPUT)/test-stalemate.pgn
-	cmp test-stalemate-out.pgn $(OUTPUT)/test-stalemate-out.pgn
+	$(PGN_EXTRACT) --stalemate -otest-stalemate-out.pgn --quiet $(INPUT)$(SEP)test-stalemate.pgn
+	$(CMP) test-stalemate-out.pgn $(OUTPUT)$(SEP)test-stalemate-out.pgn
 
 # --fifty
 #     + Input file containing games.
@@ -679,8 +750,8 @@ test-stalemate:
 #     - Expected output: test-fifty-out.pgn
 test-fifty:
 	echo "test-fifty:"
-	$(PGN_EXTRACT) --fifty --markmatches FIFTY -otest-fifty-out.pgn --quiet $(INPUT)/test-fifty.pgn
-	cmp test-fifty-out.pgn $(OUTPUT)/test-fifty-out.pgn
+	$(PGN_EXTRACT) --fifty --markmatches FIFTY -otest-fifty-out.pgn --quiet $(INPUT)$(SEP)test-fifty.pgn
+	$(CMP) test-fifty-out.pgn $(OUTPUT)$(SEP)test-fifty-out.pgn
 
 # --repetition
 #     + Input file containing games.
@@ -690,18 +761,18 @@ test-fifty:
 #     - Expected output: test-repetition-out.pgn
 test-repetition:
 	echo "test-repetition:"
-	$(PGN_EXTRACT) --repetition --markmatches REPEAT -otest-repetition-out.pgn --quiet $(INPUT)/test-repetition.pgn
-	cmp test-repetition-out.pgn $(OUTPUT)/test-repetition-out.pgn
+	$(PGN_EXTRACT) --repetition --markmatches REPEAT -otest-repetition-out.pgn --quiet $(INPUT)$(SEP)test-repetition.pgn
+	$(CMP) test-repetition-out.pgn $(OUTPUT)$(SEP)test-repetition-out.pgn
 
-# --totalplycount
+# --plycount and --totalplycount
 #     + Input file containing games.
-#     - Input file(s): test-totalplycount.pgn
-#     - Resulting output should contain games with a TotalPlyCount tag.
-#     - Expected output: test-totalplycount-out.pgn
-test-totalplycount:
-	echo "test-totalplycount:"
-	$(PGN_EXTRACT) --totalplycount -otest-totalplycount-out.pgn --quiet $(INPUT)/test-totalplycount.pgn
-	cmp test-totalplycount-out.pgn $(OUTPUT)/test-totalplycount-out.pgn
+#     - Input file(s): test-plycount.pgn
+#     - Resulting output should contain games with PlyCount and TotalPlyCount tags.
+#     - Expected output: test-plycount-out.pgn
+test-plycount:
+	echo "test-plycount:"
+	$(PGN_EXTRACT) --plycount --totalplycount -otest-plycount-out.pgn --quiet $(INPUT)$(SEP)test-plycount.pgn
+	$(CMP) test-plycount-out.pgn $(OUTPUT)$(SEP)test-plycount-out.pgn
 
 # --addhashcode
 #     + Input file containing games.
@@ -710,8 +781,8 @@ test-totalplycount:
 #     - Expected output: test-addhashcode-out.pgn
 test-addhashcode:
 	echo "test-addhashcode:"
-	$(PGN_EXTRACT) --addhashcode -otest-addhashcode-out.pgn --quiet $(INPUT)/test-addhashcode.pgn
-	cmp test-addhashcode-out.pgn $(OUTPUT)/test-addhashcode-out.pgn
+	$(PGN_EXTRACT) --addhashcode -otest-addhashcode-out.pgn --quiet $(INPUT)$(SEP)test-addhashcode.pgn
+	$(CMP) test-addhashcode-out.pgn $(OUTPUT)$(SEP)test-addhashcode-out.pgn
 
 # Test on a file with a string too long to be output within the
 # defined line length.
@@ -722,9 +793,9 @@ test-addhashcode:
 #     + Expected output: test-long-line-out.pgn, test-long-line-log.txt
 test-long-line:
 	echo "test long line:"
-	$(PGN_EXTRACT) -otest-long-line-out.pgn -ltest-long-line-log.txt $(INPUT)/test-long-line.pgn
-	cmp test-long-line-out.pgn $(OUTPUT)/test-long-line-out.pgn
-	cmp test-long-line-log.txt $(OUTPUT)/test-long-line-log.txt
+	$(PGN_EXTRACT) -otest-long-line-out.pgn -ltest-long-line-log.txt $(INPUT)$(SEP)test-long-line.pgn
+	$(CMP) test-long-line-out.pgn $(OUTPUT)$(SEP)test-long-line-out.pgn
+#       $(CMP) test-long-line-log.txt $(OUTPUT)$(SEP)test-long-line-log.txt
 
 # Promotion characters.
 #     + Input file with games involving a promotion
@@ -733,8 +804,10 @@ test-long-line:
 #     - Expected output: test-promotion-out.pgn
 test-promotion:
 	echo "test-promotion:"
-	$(PGN_EXTRACT) -otest-promotion-out.pgn --quiet $(INPUT)/test-promotion-in.pgn
-	cmp test-promotion-out.pgn $(OUTPUT)/test-promotion-out.pgn
+	$(PGN_EXTRACT) -otest-promotion-out.pgn --quiet $(INPUT)$(SEP)test-promotion-in.pgn
+	$(CMP) test-promotion-out.pgn $(OUTPUT)$(SEP)test-promotion-out.pgn
+	$(PGN_EXTRACT) --underpromotion -otest-underpromotion-out.pgn --quiet $(INPUT)$(SEP)test-promotion-in.pgn
+	$(CMP) test-underpromotion-out.pgn $(OUTPUT)$(SEP)test-underpromotion-out.pgn
 
 # Inconsistent Result tags
 #     + Input file with games where the Result tag conflicts with checkmate or stalemate.
@@ -743,30 +816,30 @@ test-promotion:
 #     - Expected output: test-fixresulttags-out.pgn
 test-fixresulttags:
 	echo "test-fixresulttags:"
-	$(PGN_EXTRACT) --fixresulttags -otest-fixresulttags-out.pgn -lfix-results-log.txt --quiet $(INPUT)/test-fixresulttags-in.pgn
-	cmp test-fixresulttags-out.pgn $(OUTPUT)/test-fixresulttags-out.pgn
-	cmp fix-results-log.txt $(OUTPUT)/fix-results-log.txt
+	$(PGN_EXTRACT) --fixresulttags -otest-fixresulttags-out.pgn -lfix-results-log.txt --quiet $(INPUT)$(SEP)test-fixresulttags-in.pgn
+	$(CMP) test-fixresulttags-out.pgn $(OUTPUT)$(SEP)test-fixresulttags-out.pgn
+#       $(CMP) fix-results-log.txt $(OUTPUT)$(SEP)fix-results-log.txt
 
 # --fuzzydepth
 #     + Input file containing games with fuzzy duplicates and non-duplicates.
-#     - Input file(s): $(INPUT)/test-fuzzydepth.pgn
+#     - Input file(s): $(INPUT)$(SEP)test-fuzzydepth.pgn
 #     - Resulting output should be files separating the unique and
 #       duplicated games in the input files.
 #     - Expected output: test-fuzzydepth0-unique.pgn, test-fuzzydepth0-dupes.pgn
 test-fuzzydepth:
 	echo "test-duplicates:"
-	$(PGN_EXTRACT) --fuzzydepth 0 -dtest-fuzzydepth0-dupes.pgn -otest-fuzzydepth0-unique.pgn --quiet $(INPUT)/test-fuzzydepth.pgn
-	cmp test-fuzzydepth0-dupes.pgn $(OUTPUT)/test-fuzzydepth0-dupes.pgn
-	cmp test-fuzzydepth0-unique.pgn $(OUTPUT)/test-fuzzydepth0-unique.pgn
-	$(PGN_EXTRACT) --fuzzydepth 3 -dtest-fuzzydepth3-dupes.pgn -otest-fuzzydepth3-unique.pgn --quiet $(INPUT)/test-fuzzydepth.pgn
-	cmp test-fuzzydepth3-dupes.pgn $(OUTPUT)/test-fuzzydepth3-dupes.pgn
-	cmp test-fuzzydepth3-unique.pgn $(OUTPUT)/test-fuzzydepth3-unique.pgn
-	$(PGN_EXTRACT) --fuzzydepth 4 -dtest-fuzzydepth4-dupes.pgn -otest-fuzzydepth4-unique.pgn --quiet $(INPUT)/test-fuzzydepth.pgn
-	cmp test-fuzzydepth4-dupes.pgn $(OUTPUT)/test-fuzzydepth4-dupes.pgn
-	cmp test-fuzzydepth4-unique.pgn $(OUTPUT)/test-fuzzydepth4-unique.pgn
-	$(PGN_EXTRACT) --fuzzydepth 5 -dtest-fuzzydepth5-dupes.pgn -otest-fuzzydepth5-unique.pgn --quiet $(INPUT)/test-fuzzydepth.pgn
-	cmp test-fuzzydepth5-dupes.pgn $(OUTPUT)/test-fuzzydepth5-dupes.pgn
-	cmp test-fuzzydepth5-unique.pgn $(OUTPUT)/test-fuzzydepth5-unique.pgn
+	$(PGN_EXTRACT) -C --fuzzydepth 0 -dtest-fuzzydepth0-dupes.pgn -otest-fuzzydepth0-unique.pgn --quiet $(INPUT)$(SEP)test-fuzzydepth.pgn
+	$(CMP) test-fuzzydepth0-dupes.pgn $(OUTPUT)$(SEP)test-fuzzydepth0-dupes.pgn
+	$(CMP) test-fuzzydepth0-unique.pgn $(OUTPUT)$(SEP)test-fuzzydepth0-unique.pgn
+	$(PGN_EXTRACT) -C --fuzzydepth 3 -dtest-fuzzydepth3-dupes.pgn -otest-fuzzydepth3-unique.pgn --quiet $(INPUT)$(SEP)test-fuzzydepth.pgn
+	$(CMP) test-fuzzydepth3-dupes.pgn $(OUTPUT)$(SEP)test-fuzzydepth3-dupes.pgn
+	$(CMP) test-fuzzydepth3-unique.pgn $(OUTPUT)$(SEP)test-fuzzydepth3-unique.pgn
+	$(PGN_EXTRACT) -C --fuzzydepth 4 -dtest-fuzzydepth4-dupes.pgn -otest-fuzzydepth4-unique.pgn --quiet $(INPUT)$(SEP)test-fuzzydepth.pgn
+	$(CMP) test-fuzzydepth4-dupes.pgn $(OUTPUT)$(SEP)test-fuzzydepth4-dupes.pgn
+	$(CMP) test-fuzzydepth4-unique.pgn $(OUTPUT)$(SEP)test-fuzzydepth4-unique.pgn
+	$(PGN_EXTRACT) -C --fuzzydepth 5 -dtest-fuzzydepth5-dupes.pgn -otest-fuzzydepth5-unique.pgn --quiet $(INPUT)$(SEP)test-fuzzydepth.pgn
+	$(CMP) test-fuzzydepth5-dupes.pgn $(OUTPUT)$(SEP)test-fuzzydepth5-dupes.pgn
+	$(CMP) test-fuzzydepth5-unique.pgn $(OUTPUT)$(SEP)test-fuzzydepth5-unique.pgn
 
 # Selection or exclusion of games with SetUp tags.
 #     + Input file with games involving SetUp tags.
@@ -776,10 +849,10 @@ test-fuzzydepth:
 #     - Expected output: test-nosetup-out.pgn test-onlysetup-out.pgn
 test-setup:
 	echo "test-setup:"
-	$(PGN_EXTRACT) --nosetuptags -otest-nosetup-out.pgn --quiet $(INPUT)/test-setup-in.pgn
-	cmp test-nosetup-out.pgn $(OUTPUT)/test-nosetup-out.pgn
-	$(PGN_EXTRACT) --onlysetuptags -otest-onlysetup-out.pgn --quiet $(INPUT)/test-setup-in.pgn
-	cmp test-onlysetup-out.pgn $(OUTPUT)/test-onlysetup-out.pgn
+	$(PGN_EXTRACT) --nosetuptags -otest-nosetup-out.pgn --quiet $(INPUT)$(SEP)test-setup-in.pgn
+	$(CMP) test-nosetup-out.pgn $(OUTPUT)$(SEP)test-nosetup-out.pgn
+	$(PGN_EXTRACT) --onlysetuptags -otest-onlysetup-out.pgn --quiet $(INPUT)$(SEP)test-setup-in.pgn
+	$(CMP) test-onlysetup-out.pgn $(OUTPUT)$(SEP)test-onlysetup-out.pgn
 
 # --stopafter
 #     + Input file containing games.
@@ -788,6 +861,55 @@ test-setup:
 #     - Expected output: test-stopafter-out.pgn
 test-stopafter:
 	echo "test-stopafter:"
-	$(PGN_EXTRACT) -TpPetrosian --stopafter 1 -otest-stopafter-out.pgn --quiet $(INPUT)/test-stopafter.pgn
-	cmp test-stopafter-out.pgn $(OUTPUT)/test-stopafter-out.pgn
+	$(PGN_EXTRACT) -TpPetrosian --stopafter 1 -otest-stopafter-out.pgn --quiet $(INPUT)$(SEP)test-stopafter.pgn
+	$(CMP) test-stopafter-out.pgn $(OUTPUT)$(SEP)test-stopafter-out.pgn
 
+# --nobadresults
+#     + Input file containing games with inconsistent or incomplete results.
+#     - Input file(s): test-nobadresults.pgn
+#     - Resulting output should contain only those games which are not
+#       strictly inconsistent.
+#     - Expected output: test-nobadresults-out.pgn
+test-nobadresults:
+	echo "test-nobadresults:"
+	$(PGN_EXTRACT) --nobadresults -otest-nobadresults-out.pgn -ltest-nobadresults-log.txt --quiet $(INPUT)$(SEP)test-nobadresults.pgn
+	$(CMP) test-nobadresults-out.pgn $(OUTPUT)$(SEP)test-nobadresults-out.pgn
+#       $(CMP) test-nobadresults-log.txt $(OUTPUT)$(SEP)test-nobadresults-log.txt
+
+# --allownullmoves
+#     + Input file containing games with inconsistent or incomplete results.
+#     - Input file(s): test-allownullmoves.pgn
+#     - Resulting output should contain only those games which are not
+#       strictly inconsistent.
+#     - Expected output: test-allownullmoves-out.pgn
+test-allownullmoves:
+	echo "test-allownullmoves:"
+	$(PGN_EXTRACT) --allownullmoves -otest-allownullmoves-out.pgn -ltest-allownullmoves-log.txt --quiet $(INPUT)$(SEP)test-allownullmoves.pgn
+	$(CMP) test-allownullmoves-out.pgn $(OUTPUT)$(SEP)test-allownullmoves-out.pgn
+#       $(CMP) test-allownullmoves-log.txt $(OUTPUT)$(SEP)test-allownullmoves-log.txt
+
+# --matchplylimit
+#     + Input file containing games.
+#     - Input file(s): test-matchplylimit.pgn
+#     - Resulting output should contain games whose number of moves (plies) are
+#       limited at the specified ply limit.
+#     - Expected output: test-matchplylimit-out.pgn
+test-matchplylimit:
+	echo "test-matchplylimit:"
+	-$(RM) test-matchplylimit-out.pgn
+	$(PGN_EXTRACT) -Hdb55d4fcaadc775e --matchplylimit 8 --markmatches match -atest-matchplylimit-out.pgn --quiet $(INPUT)$(SEP)test-matchplylimit.pgn
+	$(PGN_EXTRACT) -Hdb55d4fcaadc775e --matchplylimit 9 --markmatches match -atest-matchplylimit-out.pgn --quiet $(INPUT)$(SEP)test-matchplylimit.pgn
+	$(PGN_EXTRACT) -Hdb55d4fcaadc775e --matchplylimit 10 --markmatches match -atest-matchplylimit-out.pgn --quiet $(INPUT)$(SEP)test-matchplylimit.pgn
+	$(PGN_EXTRACT) -Hdb55d4fcaadc775e --matchplylimit 150 --markmatches match -atest-matchplylimit-out.pgn --quiet $(INPUT)$(SEP)test-matchplylimit.pgn
+	$(CMP) test-matchplylimit-out.pgn $(OUTPUT)$(SEP)test-matchplylimit-out.pgn
+
+# -A/-t with FENPattern and FENPatternI
+# Test both FENPattern and FENPatternI and add a MatchLabel tag
+# if the pattern has an associated label.
+test-FENPattern:
+	echo "test-FENPattern:"
+	$(PGN_EXTRACT) -otest-FENPattern-out.pgn -ltest-FENPattern-log.txt --quiet \
+            -A$(INPUT)$(SEP)test-FENPattern.txt --addlabeltag --markmatches HERE \
+            $(INPUT)$(SEP)/petrosian.pgn
+	$(CMP) test-FENPattern-out.pgn $(OUTPUT)$(SEP)test-FENPattern-out.pgn
+#       $(CMP) test-FENPattern-log.txt $(OUTPUT)$(SEP)test-FENPattern-log.txt
