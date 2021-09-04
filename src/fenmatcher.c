@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@
 #include "grammar.h"
 #include "apply.h"
 #include "fenmatcher.h"
+#include "end.h"
 
 /* Character on an encoded board representing an empty square. */
 #define EMPTY_SQUARE '_'
@@ -53,13 +54,6 @@
  * and ideas from Kernighan and Plauger's "Software Tools".
  */
 
-/* The list of FEN-based patterns to match. */
-typedef struct FENPattern {
-    char **pattern_ranks;
-    const char *optional_label;
-    struct FENPattern *next;
-} FENPattern;
-
 /* A single rank of a FEN-based patterns to match.
  * Ranks are chained as a linear list via next_rank and
  * alternatives for the same rank via alternative_rank.
@@ -71,6 +65,7 @@ typedef struct FENPatternMatch {
     const char *optional_label;
     struct FENPatternMatch *alternative_rank;
     struct FENPatternMatch *next_rank;
+    Material_details *constraint;
 } FENPatternMatch;
 
 static FENPatternMatch *pattern_tree = NULL;
@@ -82,7 +77,7 @@ static Boolean matchnccl(const char *regexp, const char *text);
 static Boolean matchone(char regchar, char textchar);
 static void convert_rank_to_text(const Board *board, Rank rank, char *text);
 static const char *reverse_fen_pattern(const char *pattern);
-static void pattern_tree_insert(char **ranks, const char *label);
+static void pattern_tree_insert(char **ranks, const char *label, Material_details *constraint);
 static void insert_pattern(FENPatternMatch *node, FENPatternMatch *next);
 static const char *pattern_match_rank(const Board *board, 
         FENPatternMatch *pattern, int patternIndex, 
@@ -109,7 +104,7 @@ add_fen_pattern(const char *fen_pattern, Boolean add_reverse, const char *label)
     const char *rank_start = fen_pattern;
     Boolean in_closure = FALSE;
     char **ranks = (char **) malloc_or_die(BOARDSIZE * sizeof(*ranks));
-    while (*p != '\0' && *p != ' ' && ok) {
+    while (*p != '\0' && *p != ' ' && *p != MATERIAL_CONSTRAINT && ok) {
         if (*p == '/') {
             /* End of this rank. */
             if (rankSymbols == 0) {
@@ -179,7 +174,16 @@ add_fen_pattern(const char *fen_pattern, Boolean add_reverse, const char *label)
         ranks[dividers][num_chars] = '\0';            
     }
     if (ok) {
-        pattern_tree_insert(ranks, label != NULL ? copy_string(label) : copy_string(""));
+        Material_details *constraint;
+        if(*p == MATERIAL_CONSTRAINT) {
+            p++;
+            /* Deal with a constraint on the material that must also match. */
+            constraint = process_material_description(p, add_reverse, TRUE);
+        }
+        else {
+            constraint = NULL;
+        }
+        pattern_tree_insert(ranks, label != NULL ? copy_string(label) : copy_string(""), constraint);
         
         /* Do the same again if a reversed version is required. */
         if(add_reverse) {
@@ -269,7 +273,7 @@ static const char *reverse_fen_pattern(const char *pattern)
  * to consolidate similar patterns.
  */
 static void
-pattern_tree_insert(char **ranks, const char *label)
+pattern_tree_insert(char **ranks, const char *label, Material_details *constraint)
 {
     FENPatternMatch *match = (FENPatternMatch *) malloc_or_die(sizeof(*match));
     /* Create a linked list for the ranks. 
@@ -281,11 +285,14 @@ pattern_tree_insert(char **ranks, const char *label)
         next->alternative_rank = NULL;
         if(i != BOARDSIZE - 1) {
             next->next_rank = (FENPatternMatch *) malloc_or_die(sizeof(*match));
+            next->optional_label = NULL;
+            next->constraint = NULL;
             next = next->next_rank;
         }
         else {
             next->next_rank = NULL;
             next->optional_label = label;
+            next->constraint = constraint;
         }
     }
     if(pattern_tree == NULL) {
@@ -351,9 +358,9 @@ pattern_match_board(const Board *board)
 }
 
 
-/* Match ranks[patternIndex ...] against board and return the
- * corresponding match label if a match is found. Otherwise
- * return NULL.
+/* Match ranks[patternIndex ...] against board.
+ * return the corresponding match label if a match is found.
+ * Return NULL if no match is found.
  */
 static const char *pattern_match_rank(const Board *board, FENPatternMatch *pattern, int patternIndex, char ranks[BOARDSIZE+1][BOARDSIZE+1])
 {
@@ -367,8 +374,15 @@ static const char *pattern_match_rank(const Board *board, FENPatternMatch *patte
     while(match_label == NULL && pattern != NULL) {
         if(matchhere(pattern->rank, ranks[patternIndex])) {
             if(patternIndex == BOARDSIZE - 1) {
-                /* A complete match. */
-                match_label = pattern->optional_label;
+                /* The board matches the pattern. */
+                if(pattern->constraint != NULL) {
+                    if(constraint_material_match(pattern->constraint, board)) {
+                        match_label = pattern->optional_label;
+                    }
+                }
+                else {
+                    match_label = pattern->optional_label;
+                }
             }
             else {
                 /* Try next rank.*/

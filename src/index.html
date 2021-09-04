@@ -28,7 +28,7 @@
   <div id="banner-wrapper">
     <div id="banner">
 <h1 align="center">pgn-extract:<br />A Portable Game Notation (PGN) Manipulator for Chess Games<br />
-Version 19-04 by <a href="https://www.cs.kent.ac.uk/~djb/">David J. Barnes</a>
+Version 20-06 by <a href="https://www.cs.kent.ac.uk/~djb/">David J. Barnes</a>
 (<a href="https://twitter.com/kentdjb">@kentdjb</a>)<br />
 <a href="pgn-extract.xml">
 <img alt="RSS feed image" src="feed.png" width="25" height="25"></a>
@@ -54,16 +54,11 @@ version.
 pgn-extract compiles and runs under Windows, Linux and Mac OS X.
 This program is made available under the terms of the
 <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/COPYING">GNU
-General Public License (Version 1).</a>
+General Public License (Version 3).</a>
 
 <h2>Getting-started video for Windows users</h2>
 <p>For Windows users who are really only interested in getting
 the binary working, there is <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/intro.mp4">a short introductory video</a>.
-
-<h2>Blog post about data mining with pgn-extract</h2>
-<p>In October 2018 I wrote <a href="http://blogs.kent.ac.uk/djb/2018/10/14/data-mining-with-pgn-extract/">blog post</a>
-about using pgn-extract to mine a PGN database. 
-As an example it looks at the effect of having a bishop pair versus a knight pair.
 
 <h2>Overview</h2>
 <p>The program is designed to make it easy to extract and format selected games from a
@@ -106,28 +101,21 @@ get the full lists of arguments.
 <h2>New in recent versions</h2>
 <p>These are the main changes in the most recent versions:
 <ul>
-    <li><p>Accept Z0 as an alternative to --.
-    <li><p>Added -y as an alternative to -z for colour-specific material matches.
-    <li><p>Added --dropbefore to drop ply occuring before a particular comment pattern.
-    <li><p>With --allownullmoves uppress the warning for null moves.
-    <li><p>Added --dropply.
-    <li><p>Added --nestedcomments to allow non-standard nested comments.
-    <li><p>Corrected failure to OR rather than AND the pseudo Elo
-        tag used with -t.
-    <li><p>Fixed a memory leak with -z.
-    <li><p>Made it possible to identify which -z pattern
-    was matched in a game.
+    <li><p>Relational TimeControl matching with -t.
+    <li><p>Attempt to fix common bad string formats in tag strings with --fixtagstrings 
+    <li><p>Added --wtm and --btm to constrain matches according to who is to move in the
+    matched position.
 </ul>
 
 <h2>Available Files</h2>
 <p>You can take a copy of the full source and
 documentation as either
-<a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.tgz">pgn-extract.tgz</a> 
+<a
+href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-20-06.tgz">pgn-extract-20-06.tgz</a> 
 or
-<a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.zip">pgn-extract.zip</a>.
-Alternatively, <a
-href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.exe">a win32
-binary</a> is available.
+<a
+href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-20-06.zip">pgn-extract-20-06.zip</a>.
+Alternatively, <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.exe">a win32 binary</a> is available.
 </p>
     <table>
     <tr>
@@ -138,27 +126,29 @@ binary</a> is available.
     </tr>
 
     <tr valign="top">
-    <td><a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.tgz">pgn-extract.tgz</a><br>
+    <td><a
+    href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-20-06.tgz">pgn-extract-20-06.tgz</a><br>
     <td>GZipped tar file
     of the complete source of the latest version of the program.<br>
     Includes <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/help.html">usage documentation</a>,
     Makefile for compilation and
     <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/eco.pgn">eco.pgn</a> file for ECO classification.</td>
-    <td align="right">393K bytes &nbsp;</td><td>14 Oct 2018</td>
+    <td align="right">404K bytes &nbsp;</td><td>30 Dec 2020</td>
     </tr>
 
     <tr valign="top">
-    <td><a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.zip">pgn-extract.zip</a></td>
+    <td><a
+    href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-20-06.zip">pgn-extract-20-06.zip</a></td>
     <td>Zipped file of the complete source of the latest version of the program.<br>
     Includes <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/help.html">usage documentation</a>, Makefile for compilation and
     <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/eco.pgn">eco.pgn</a> file for ECO classification.</td>
-    <td align="right">547K bytes &nbsp;</td><td>14 Oct 2018</td>
+    <td align="right">560K bytes &nbsp;</td><td>30 Dec 2020</td>
     </tr>
 
     <tr>
     <td><a href="https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.exe">pgn-extract.exe</a></td>
     <td>win32 binary of the latest version of the program.</td>
-    <td align="right">687K bytes &nbsp;</td><td>14 Oct 2018</td>
+    <td align="right">704K bytes &nbsp;</td><td>18 Dec 2020</td>
     </tr>
 
     <tr>
@@ -172,7 +162,7 @@ binary</a> is available.
     <td>File of openings with PGN classification.<br>
 	This file is already included in the source archives.
     </td>
-    <td align="right">254K bytes &nbsp;</td><td>May 24 2013</td>
+    <td align="right">254K bytes &nbsp;</td><td>Jan 27 2021</td>
     </tr>
 
     <tr>
@@ -181,6 +171,20 @@ binary</a> is available.
     <td align="right">35K bytes &nbsp;</td><td>&nbsp;</td>
     </tr>
     </table>
+
+<h2>Blog post about data mining with pgn-extract</h2>
+<p>In October 2018 I wrote <a href="http://blogs.kent.ac.uk/djb/2018/10/14/data-mining-with-pgn-extract/">blog post</a>
+about using pgn-extract to mine a PGN database. 
+As an example it looks at the effect of having a bishop pair versus a knight pair.
+
+<h2>Answers on Chess StackExchange using pgn-extract</h2>
+<p>From time to time, I have provided answers on <a href="https://chess.stackexchange.com/">Chess StackExchange</a> that involve
+the use of pgn-extract:
+<ul>
+  <li><p><a href="https://chess.stackexchange.com/questions/23938/is-there-a-record-for-threefold-repetition-for-when-the-claimed-positions-are-th/24276#24276">Three-fold repetition</a>.
+  <li><p><a href="https://chess.stackexchange.com/questions/24166/what-professional-game-has-the-quickest-sequence-starting-from-move-one-to-qua/24274#24274">Quadrupled pawns</a>.
+  <li><p><a href="https://chess.stackexchange.com/questions/24245/how-often-does-castling-occur-in-grandmaster-games/24247#24247">Frequency of occurrence of castlng</a>.
+</ul>
 
 <h2>Feedback</h2>
 <p>Feedback and suggestions for further features are always welcome, although I can't always
@@ -191,11 +195,11 @@ promise to undertake significant development work.
 
   <div id="footer">
 <address>
-<p>&#169; 1994-2019 David J. Barnes<br />
+<p>&#169; 1994-2021 David J. Barnes<br />
 <a href="https://www.cs.kent.ac.uk/~djb/">My home page</a> at the University of Kent.<br />
 <a href="mailto:d.j.barnes @ kent.ac.uk">d.j.barnes @ kent.ac.uk</a><br />
 <a href="https://twitter.com/kentdjb">@kentdjb</a><br />
-Last updated: 23rd April 2019: version 19-04 released.<br />
+Last updated: 18th December 2020: version 20-06 released.<br />
 </p>
 </address>
   </div>

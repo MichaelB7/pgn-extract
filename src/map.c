@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -466,12 +466,16 @@ find_pawn_moves(Col from_col, Rank from_rank, Col to_col, Rank to_rank,
         else if (piece_is_colour(board->board[to_r][to_c], OPPOSITE_COLOUR(colour))) {
             /* Capture on the destination square. */
             if (from_col != 0) {
-                /* We know the from column. */
-                from_r = to_r - offset;
-                if (board->board[from_r][from_c] == piece_to_move) {
-                    move = append_move_pair(ToCol(from_c), ToRank(from_r),
-                            to_col, to_rank, NULL);
-                }
+                /* We know the from column.
+		 * Make sure the capture is directly diagonal.
+		 */
+		if(abs(from_col - to_col) == 1) {
+		    from_r = to_r - offset;
+		    if (board->board[from_r][from_c] == piece_to_move) {
+			move = append_move_pair(ToCol(from_c), ToRank(from_r),
+				to_col, to_rank, NULL);
+		    }
+		}
             }
         }
         else {
@@ -1512,7 +1516,7 @@ find_castling_king_col(Colour colour, const Board *board)
 
 /* Find the column where the Rook of the given colour is to execute
  * the indicated castling move (KINGSIDE_CASTLE or QUEENSIDE_CASTLE).
- * The Room is assumed to be in position to castle.
+ * The Rook is assumed to be in position to castle.
  * This supports Chess960 positioning.
  * Return \0 if the Rook cannot be found.
  */
@@ -1817,7 +1821,7 @@ determine_move_details(Colour colour, Move *move_details, Board *board)
         move_details->promoted_piece = EMPTY;
 
         /* Because the decoding process did not have the current board
-         * position available, trap apparent pawn moves that maybe something
+         * position available, trap apparent pawn moves that may be something
          * else.
          * At the moment, only do this when full positional information is
          * available.

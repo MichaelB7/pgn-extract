@@ -1,22 +1,42 @@
-[Event "?"]
-[Site "Belgrade"]
-[Date "1954.??.??"]
+[Event "Zurich"]
+[Site "?"]
+[Date "1959"]
 [Round "?"]
-[White "Janosevic"]
-[Black "Petrosian, Tigran V."]
+[White "Fischer, Robert J."]
+[Black "Larsen, Bent"]
+[Result "1/2-1/2"]
+
+1. e4 c6 2. Nf3 d5 3. Nc3 Bg4 4. h3 Bxf3 5. Qxf3 Nf6 6. d3 e6 7. a3 Bc5 8.
+Be2 O-O 9. O-O Nbd7 10. Qg3 Bd4 11. Bh6 Ne8 12. Bg5 Ndf6 13. Bf3 Qd6 14.
+Bf4 Qc5 15. Rab1 dxe4 16. dxe4 e5 17. Bg5 Bxc3 18. bxc3 b5 19. c4 { MATCH }
+19... a6 20. Bd2 Qe7 21. Bb4 Nd6 22. Rfd1 Rfd8 23. cxb5 cxb5 24. Rd3 Qe6
+25. Rbd1 Nb7 26. Bc3 Rxd3 27. cxd3 Re8 28. Kh2 h6 29. d4 Nd6 30. Re1 Nc4
+31. dxe5 Nxe5 32. Bd1 Ng6 33. e5 Nd5 34. Bb3 Qc6 35. Bb2 Ndf4 36. Rd1 a5
+37. Rd6 Qe4 38. Rd7 Ne6 39. Bd5 Qe2 40. Bc3 b4 41. axb4 axb4 42. Bxb4 Qxe5
+43. Ba5 Qxg3+ 44. Kxg3 Re7 45. Rd6 Nef4 46. Bf3 Ne6 47. Bb6 Ne5 48. Bd5 Rd7
+49. Rxd7 Nxd7 50. Be3 Nf6 51. Bc6 g5 52. Kf3 Kg7 53. Ba4 Nd5 54. Bc1 h5 55.
+Bb2+ Kh6 56. Bb3 Ndf4 57. Bc2 Ng6 58. Kg3 Nef4 59. Be4 Nh4 60. Bf6 Nhg6 61.
+Kf3 Nh4+ 62. Kg3 Nhg6 63. Kh2 h4 64. Kg1 Nh5 65. Bc3 Ngf4 66. Kf1 Ng7 67.
+Bf6 Nfh5 68. Be5 f6 69. Bd6 f5 70. Bf3 Nf4 71. Ke1 Kg6 72. Kd2 Nge6 73. Be5
+Nc5 74. Ke3 Nce6 75. Bc6 Kf7 76. Kf3 Ke7 77. Bb7 Ng6 78. Bc3 Ngf4 79. Ba6
+Nd5 80. Be5 Nf6 81. Bd3 g4+ 82. Ke2 Nd7 83. Bh2 gxh3 84. gxh3 Kf6 85. Ke3
+Ne5 86. Be2 Ng6 87. Bf1 f4+ 88. Kf3 Ne5+ 89. Ke4 Ng5+ 90. Kxf4 Nef3 91. Bg3
+hxg3 92. fxg3 1/2-1/2
+
+[Event "Zabreb"]
+[Site "?"]
+[Date "1970"]
+[Round "?"]
+[White "Fischer, Robert J."]
+[Black "Marovic, Drazen"]
 [Result "1-0"]
 
-1. e4 c6 2. d4 d5 3. exd5 cxd5 4. c4 e6 5. Nc3 Nf6 6. Bg5 Be7 7. Nf3 O-O 8.
-Rc1 a6 9. cxd5 exd5 10. Be2 Nc6 11. Ne5 Na5 12. O-O h6 13. Bh4 Bf5 14. Bf3
-Be6 15. Re1 Nc6 16. Ng6 fxg6 17. Rxe6 g5 18. Bg3 Qd7 19. Re1 Rae8 20. Be5
-Kh8 21. Qb3 g4 22. Bxd5 Nxd5 23. Nxd5 Bg5 24. Rcd1 Na5 25. Nb6 Qd8 26. Qa4
-Qxb6 27. Bxg7+ Kxg7 28. Rxe8 Nc6 29. Rxf8 Kxf8 30. d5 Ne5 31. d6 Qxb2 32.
-d7 Nf7 33. Qxg4 Qxa2 34. Qb4+ Be7 35. d8=Q+ Nxd8 36. Rxd8+ Kf7 37. Qf4+ Kg7
-38. Qg4+ Kf6 39. Rd1 b5 40. h4 Qe6 41. Qh5 Kg7 42. Rd3 Bd6 43. Qd1 Bc5 44.
-Rg3+ Kf6 45. Qa1+ Kf5 46. Qb1+ Ke5 47. Rg6 Qf7 48. Qe1+ Kd5 49. Rxa6 Qf4
-50. Qd1+ Kc4 51. Ra2 Bd4 52. Qe2+ Kb4 53. Qe1+ Kb3 54. Qb1+ Kc4 55. Rc2+
-Bc3 56. Re2 Bd4 57. Qc2+ Kd5 58. Qb3+ Kc5 59. g3 Qf6 60. Rc2+ Kb6 61. Kg2
-Qf5 62. Re2 Kc5 63. Qc2+ Qxc2 64. Rxc2+ Kd5 65. f4 b4 66. Kf3 b3 67. Rc1 b2
-68. Rd1 h5 69. g4 hxg4+ 70. Kxg4 Ke4 71. h5 Be3 72. Rb1 Bc1 73. h6 Bxf4 74.
-Re1+ 1-0
+1. e4 c6 2. d3 d5 3. Nd2 Nd7 4. Ngf3 Qc7 5. exd5 cxd5 6. d4 g6 7. Bd3 Bg7
+8. O-O e6 9. Re1 Ne7 10. Nf1 Nc6 11. c3 O-O 12. Bg5 e5 13. Ne3 Nb6 14. dxe5
+Nxe5 15. Bf4 f6 16. a4 Qf7 17. a5 Nbc4 18. Bxc4 dxc4 19. Bxe5 fxe5 20. Qe2
+h6 { MATCH } 21. Nxc4 Bg4 22. Ncxe5 Bxe5 23. Nxe5 Bxe2 24. Nxf7 Rxf7 25.
+Rxe2 Rd8 26. Rae1 Rd5 27. b4 Rc7 28. Re3 Kf7 29. h4 Rd2 30. Rf3+ Kg7 31.
+Re6 Rf7 32. Rxf7+ Kxf7 33. Re5 Rd1+ 34. Kh2 b6 35. axb6 axb6 36. f3 Rd3 37.
+Rb5 Rxc3 38. Rxb6 h5 39. Rb7+ Kf6 40. b5 Rb3 41. b6 Rb4 42. Kg3 Rb2 43. Rb8
+Kg7 44. f4 Rb3+ 45. Kf2 Kf6 46. Ke2 Kg7 47. Kd2 Rg3 48. Rc8 1-0
 

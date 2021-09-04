@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -302,6 +302,9 @@ init_lex_tables(void)
 
 /* Starting from linep in line, gather up the string until
  * the closing quote.  Skip over the closing quote.
+ * NB: This token is only used for tags, which are notoriously
+ * error prone, so there is some code attempting recovery
+ * if requested.
  */
 LinePair
 gather_string(char *line, unsigned char *linep)
@@ -332,12 +335,76 @@ gather_string(char *line, unsigned char *linep)
             /* Ordinary character. */
         }
     } while (!end_of_string);
-    /* The last one doesn't belong in the string. */
-    len--;
-    /* Allocate space for the result. */
-    str = (char *) malloc_or_die(len + 1);
-    strncpy(str, (const char *) (linep - len - 1), len);
-    str[len] = '\0';
+
+    if(GlobalState.fix_tag_strings && ch == '"') {
+        /* Look for potentially badly formatted tag strings.
+	 * Don't assume that the second double-quote character
+	 * is the termination point.
+	 */
+	unsigned char *lookahead = linep;
+	Boolean malformed = FALSE;
+	while(*lookahead != '\0' && ChTab[*lookahead] != TAG_END) {
+	    TokenType tt = ChTab[*lookahead];
+	    if(tt != WHITESPACE) {
+	        malformed = TRUE;
+	    }
+	    lookahead++;
+	}
+	if(malformed) {
+	    fprintf(GlobalState.logfile, "Malformed tag string.\n");
+	    print_error_context(GlobalState.logfile);
+	    lookahead--;
+	    while(lookahead > linep && ChTab[*lookahead] == WHITESPACE) {
+	        lookahead--;
+	    }
+	    if(*lookahead == '"') {
+	        /* Likely intended end of string. */
+		ch = *lookahead;
+		len += lookahead - linep;
+		linep = lookahead + 1;
+	    }
+	    else {
+	        /* The closing quote appears to be missing. */
+		lookahead++;
+		ch = *lookahead;
+		len += lookahead - linep;
+		linep = lookahead;
+	    }
+	    /* Replace any previous closing double quotes with single quotes. */
+	    str = (char *) malloc_or_die(len + 1);
+	    unsigned char *p = linep - len - 1;
+	    int i = 0;
+	    while(p < linep - 1) {
+	        if(*p == '"') {
+                    str[i++] = '\'';
+		    p++;
+		}
+		else if(*p == '\\') {
+		    str[i++] = *p++;
+		    str[i++] = *p++;
+		}
+		else {
+		    str[i++] = *p++;
+		}
+	    }
+	    str[i] = '\0';
+	}
+	else {
+            /* The last one doesn't belong in the string. */
+            len--;
+	    str = (char *) malloc_or_die(len + 1);
+	    strncpy(str, (const char *) (linep - len - 1), len);
+	    str[len] = '\0';
+	}
+    }
+    else {
+	/* The last one doesn't belong in the string. */
+	len--;
+	/* Allocate space for the result. */
+	str = (char *) malloc_or_die(len + 1);
+	strncpy(str, (const char *) (linep - len - 1), len);
+	str[len] = '\0';
+    }
     /* Store it in yylval. */
     yylval.token_string = str;
 
@@ -1330,6 +1397,13 @@ yywrap(void)
         }
     }
     return time_to_exit;
+}
+
+/* Return the current line number. */
+unsigned long
+get_line_number(void)
+{
+    return line_number;
 }
 
 /* Reset the file's line number. */

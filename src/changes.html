@@ -14,6 +14,32 @@
     <div id="page">
 <h2>Change History</h2>
 <ul>
+    <li>27th Jan 2021: Bug fix to --fixtagstrings.
+
+    <li>3rd Jan 2021: Added --linenumbers following a suggestion by Ejner Borgbjerg.
+
+    <li>8th Nov 2020: Added --fixtagstrings.
+
+    <li>7th Nov 2020: Date matches with -t and -T extended to match on month and day as well as year.
+
+    <li>7th Oct 2020: Added --wtm and --btm.
+
+    <li>25th Jul 2020: Added limited relational TimeControl matching with -t following
+    a suggestion by Erwin Wouterson.
+
+    <li>2nd Jul 2020: Added missing 'ep' for en passant moves with -Wxlalg and -Wxolalg.
+
+    <li>12th Feb 2020: Bug fix to eliminate illegal pawn moves in long algebraic notation.
+
+    <li>13th Oct 2019: Suppressed repeated error message with malformed dates when matching a Date tag with a relational operator.
+
+    <li>31st Jul 2019: Added --startply.
+
+    <li>21st Jun 2019: Added --fenpattern, --fenpatterni, --materialy and --materialz as command-line arguments.
+
+    <li>9th May 2019: Delete NAGs appearing before the first move of a game. $220 is
+    sometimes used (e.g., by ChessPad) as a print-board indicator.
+
     <li>22nd Apr 2019: Improved --repetition so that it does not give false positives when
     castling rights or who is to move are different.
     <p>Retain next move number rather than resetting to 1 with --dropply and --dropbefore.

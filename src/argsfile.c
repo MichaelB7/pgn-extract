@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,8 +39,9 @@
 #include "output.h"
 #include "lists.h"
 #include "mymalloc.h"
+#include "fenmatcher.h"
 
-#define CURRENT_VERSION "v19-04"
+#define CURRENT_VERSION "v21-02"
 #define URL "https://www.cs.kent.ac.uk/people/staff/djb/pgn-extract/"
 
 /* The prefix of the arguments allowed in an argsfile.
@@ -180,7 +181,8 @@ usage_and_exit(void)
         "      -Wuci is output compatible with the UCI protocol.",
         "-xvariations -- the file variations contains the lines resulting in",
         "                positions of interest.",
-        "-zendings -- the file endings contains the end positions of interest.",
+        "-yfile -- file contains a material balance of interest.",
+        "-zfile -- file contains a material balance of interest.",
         "-Z -- use the file virtual.tmp as an external hash table for duplicates.",
         "      Use when MallocOrDie messages occur with big datasets.",
 
@@ -191,6 +193,7 @@ usage_and_exit(void)
         "--addmatchtag - output a MaterialMatch tag with -z",
         "--allownullmoves - allow NULL moves in the main line",
         "--append - see -a",
+	"--btm - match position only if Black is to move (see -t)",
         "--checkfile - see -c",
         "--checkmate - see -M",
         "--commentlines - output each comment on a separate line",
@@ -199,16 +202,22 @@ usage_and_exit(void)
         "--duplicates - see -d",
         "--evaluation - include a position evaluation after each move",
         "--fencomments - include a FEN string after each move",
+        "--fenpattern pattern - match games reaching a position matching the given FEN pattern",
+        "--fenpatterni pattern - match games reaching a position matching the given FEN pattern for either side",
         "--fifty - only output games that include fifty moves with no capture or pawn move.",
         "--fixresulttags - correct Result tags that conflict with the game outcome or terminating result.",
+        "--fixtagstrings - attempt to correct tag strings that are not properly terminated.",
         "--fuzzydepth plies - positional duplicates match",
         "--hashcomments - include a hashcode string after each move",
         "--help - see -h",
         "--json - output the game in JSON format",
         "--keepbroken - retain games with errors",
         "--linelength - see -w",
+	"--linenumbers marker - include a comment with the source line numbers of each game { marker:start:end }",
         "--matchplylimit - maximum ply depth to search for positional matches",
         "--markmatches - mark positional and material matches with a comment; see -t, -v, and -z",
+        "--materialy material - material is a string describing a material balance; see -y"
+        "--materialz material - material is a string describing a material balance; see -z"
         "--nestedcomments - allow nested comments",
         "--nobadresults - reject games with inconsistent result indications.",
         "--nochecks - don't output + and # after moves.",
@@ -234,11 +243,13 @@ usage_and_exit(void)
         "--skipmatching range[,range ...] - don't output the selected matched game(s)",
         "--splitvariants [depth] - output each variation (to the given depth) as a separate game.",
         "--stalemate - only output games that end in stalemate.",
+        "--startply N - only start matching after N ply (N >= 1).",
         "--stopafter N - stop after matching N games (N > 0)",
         "--tagsubstr - match in any part of a tag (see -T and -t).",
         "--totalplycount - include a tag with the total number of plies in a game.",
         "--underpromotion - match only games that contain an underpromotion.",
         "--version - print the current version number and exit.",
+	"--wtm - match position only if White is to move (see -t)",
         "--xroster - don't output tags not included with the -R option (see -R).",
 
         /* Must be NULL terminated. */
@@ -251,7 +262,7 @@ usage_and_exit(void)
             "pgn-extract %s (%s): a Portable Game Notation (PGN) manipulator.\n",
             CURRENT_VERSION, __DATE__);
     fprintf(GlobalState.logfile,
-            "Copyright (C) 1994-2019 David J. Barnes (d.j.barnes@kent.ac.uk)\n");
+            "Copyright (C) 1994-2021 David J. Barnes (d.j.barnes@kent.ac.uk)\n");
     fprintf(GlobalState.logfile, "%s\n\n", URL);
     fprintf(GlobalState.logfile, "Usage: pgn-extract [arguments] [file.pgn ...]\n");
 
@@ -276,7 +287,7 @@ read_args_file(const char *infile)
         ArgType nexttype;
         while ((line = read_line(fp)) != NULL) {
             if (blank_line(line)) {
-                (void) free(line);
+                (void) free((void *) line);
                 continue;
             }
             nexttype = classify_arg(line);
@@ -302,15 +313,14 @@ read_args_file(const char *infile)
                             break;
                         case ENDINGS_ARGUMENT:
                         case ENDINGS_COLOURED_ARGUMENT:
-                            process_ending_line(line,
-                                                linetype == ENDINGS_ARGUMENT);
-                            (void) free(line);
+                            process_material_description(line, linetype == ENDINGS_ARGUMENT, FALSE);
+                            (void) free((void *) line);
                             break;
                         default:
                             fprintf(GlobalState.logfile,
                                     "Internal error: unknown linetype %d in read_args_file\n",
                                     linetype);
-                            (void) free(line);
+                            (void) free((void *) line);
                             exit(-1);
                     }
                 }
@@ -364,6 +374,7 @@ read_args_file(const char *infile)
                             just_arg[arglen] = '\0';
                             process_long_form_argument(just_arg,
                                     skip_leading_spaces(space));
+			    (void) free((void *) just_arg);
                         }
                         else {
                             process_long_form_argument(arg, "");
@@ -415,7 +426,7 @@ read_args_file(const char *infile)
                         linetype = nexttype;
                         break;
                 }
-                (void) free(line);
+                (void) free((void *) line);
             }
         }
         (void) fclose(fp);
@@ -662,7 +673,7 @@ process_argument(char arg_letter, const char *associated_value)
         case MOVE_BOUNDS_ARGUMENT:
         case PLY_BOUNDS_ARGUMENT:
         {
-            /* Bounds on the number of moves are to be found.
+            /* Bounds on the number of moves to be found.
              * "l#" means less-than-or-equal-to.
              * "g#" means greater-than-or-equal-to.
              * Otherwise "#" (or "e#") means that number.
@@ -1016,6 +1027,15 @@ process_long_form_argument(const char *argument, const char *associated_value)
         process_argument(APPEND_TO_OUTPUT_FILE_ARGUMENT, associated_value);
         return 2;
     }
+    else if(stringcompare(argument, "btm") == 0) {
+        if(GlobalState.whose_move == EITHER_TO_MOVE) {
+	    GlobalState.whose_move = BLACK_TO_MOVE;
+	}
+	else {
+	    fprintf(GlobalState.logfile, "%s conflicts with previous setting of white to move.\n", argument);
+	}
+	return 1;
+    }
     else if (stringcompare(argument, "checkfile") == 0) {
         process_argument(CHECK_FILE_ARGUMENT, associated_value);
         return 2;
@@ -1076,12 +1096,40 @@ process_long_form_argument(const char *argument, const char *associated_value)
         }
         return 1;
     }
+    else if (stringcompare(argument, "fenpattern") == 0) {
+        if(*associated_value != '\0') {
+            add_fen_pattern(associated_value, FALSE, "");
+            GlobalState.positional_variations = TRUE;
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a pattern following it.\n", argument);
+            exit(1);
+        }
+        return 2;
+    }
+    else if (stringcompare(argument, "fenpatterni") == 0) {
+        if(*associated_value != '\0') {
+            add_fen_pattern(associated_value, TRUE, "");
+            GlobalState.positional_variations = TRUE;
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a pattern following it.\n", argument);
+            exit(1);
+        }
+        return 2;
+    }
     else if (stringcompare(argument, "fifty") == 0) {
         GlobalState.check_for_fifty_move_rule = TRUE;
         return 1;
     }
     else if (stringcompare(argument, "fixresulttags") == 0) {
         GlobalState.fix_result_tags = TRUE;
+        return 1;
+    }
+    else if (stringcompare(argument, "fixtagstrings") == 0) {
+        GlobalState.fix_tag_strings = TRUE;
         return 1;
     }
     else if (stringcompare(argument, "fuzzydepth") == 0) {
@@ -1119,6 +1167,18 @@ process_long_form_argument(const char *argument, const char *associated_value)
     else if (stringcompare(argument, "linelength") == 0) {
         process_argument(LINE_WIDTH_ARGUMENT,
                 associated_value);
+        return 2;
+    }
+    else if (stringcompare(argument, "linenumbers") == 0) {
+        /* Save the marker string to be output. */
+        if (associated_value != NULL) {
+            GlobalState.line_number_marker = copy_string(associated_value);
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a string following it.\n", argument);
+            exit(1);
+        }
         return 2;
     }
     else if (stringcompare(argument, "markmatches") == 0) {
@@ -1160,6 +1220,28 @@ process_long_form_argument(const char *argument, const char *associated_value)
         else {
             fprintf(GlobalState.logfile,
                     "--%s requires a number following it.\n", argument);
+            exit(1);
+        }
+        return 2;
+    }
+    else if (stringcompare(argument, "materialy") == 0) {
+        if (*associated_value != '\0') {
+            (void) process_material_description(associated_value, FALSE, FALSE);
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a string of material following it.\n", argument);
+            exit(1);
+        }
+        return 2;
+    }
+    else if (stringcompare(argument, "materialz") == 0) {
+        if (*associated_value != '\0') {
+            (void) process_material_description(associated_value, TRUE, FALSE);
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a string of material following it.\n", argument);
             exit(1);
         }
         return 2;
@@ -1352,6 +1434,32 @@ process_long_form_argument(const char *argument, const char *associated_value)
         GlobalState.match_only_stalemate = TRUE;
         return 1;
     }
+    else if (stringcompare(argument, "startply") == 0) {
+        if(associated_value != NULL) {
+            int limit;
+            if(sscanf(associated_value, "%d", &limit) == 1) {
+                if(limit >= 1) {
+                    GlobalState.startply = (unsigned) limit;
+                    return 2;
+                }
+                else {
+                    fprintf(GlobalState.logfile, 
+                            "--%s must be greater than or equal to 1.\n", argument);
+                    exit(1);
+                }
+            }
+            else {
+                fprintf(GlobalState.logfile,
+                        "--%s requires a number greater than or equal to 1.\n", argument);
+                exit(1);
+            }
+        }
+        else {
+            fprintf(GlobalState.logfile,
+                    "--%s requires a number greater than or equal to 1.\n", argument);
+            exit(1);
+        }
+    }
     else if (stringcompare(argument, "stopafter") == 0) {
         int limit = 0;
 
@@ -1389,6 +1497,15 @@ process_long_form_argument(const char *argument, const char *associated_value)
         fprintf(GlobalState.logfile, "pgn-extract %s\n", CURRENT_VERSION);
         exit(0);
         return 1;
+    }
+    else if(stringcompare(argument, "wtm") == 0) {
+        if(GlobalState.whose_move == EITHER_TO_MOVE) {
+	    GlobalState.whose_move = WHITE_TO_MOVE;
+	}
+	else {
+	    fprintf(GlobalState.logfile, "%s conflicts with previous setting of black to move.\n", argument);
+	}
+	return 1;
     }
     else if (stringcompare(argument, "xroster") == 0) {
         if(GlobalState.tag_output_format == SEVEN_TAG_ROSTER) {

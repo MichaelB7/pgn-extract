@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -44,6 +44,9 @@ typedef enum { PAWN_MOVE, PAWN_MOVE_WITH_PROMOTION, ENPASSANT_PAWN_MOVE,
 	       NULL_MOVE,
                UNKNOWN_MOVE
              } MoveClass;
+
+/* Whether who is to move matters for positional matches. */
+typedef enum { WHITE_TO_MOVE, BLACK_TO_MOVE, EITHER_TO_MOVE } WhoseMove;
 
 /* Types for algebraic rank and column. */
 typedef char Rank;

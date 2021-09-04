@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -42,43 +42,8 @@
  * Games are then matched against these specifications.
  */
 
-/* Define a type to represent classes of occurrance. */
-typedef enum {
-    EXACTLY, NUM_OR_MORE, NUM_OR_LESS,
-    SAME_AS_OPPONENT, NOT_SAME_AS_OPPONENT,
-    LESS_THAN_OPPONENT, MORE_THAN_OPPONENT,
-    LESS_EQ_THAN_OPPONENT, MORE_EQ_THAN_OPPONENT
-} Occurs;
-
-/* Define a structure to hold details on the occurrances of
- * each of the pieces.
- */
-
-typedef struct ending_details {
-    /* Whether the pieces are to be tried against
-     * both colours.
-     */
-    Boolean both_colours;
-    /* The number of each set of pieces. */
-    int num_pieces[2][NUM_PIECE_VALUES];
-    Occurs occurs[2][NUM_PIECE_VALUES];
-    /* Numbers of general minor pieces. */
-    int num_minor_pieces[2];
-    Occurs minor_occurs[2];
-    /* How long a given relationship must last to be recognised.
-     * This value is in half moves.
-     */
-    unsigned move_depth;
-    /* How long a match relationship has been matched.
-     * This is always reset to zero on failure and incremented on
-     * success. A full match is only returned when match_depth == move_depth.
-     */
-    unsigned match_depth[2];
-    struct ending_details *next;
-} Ending_details;
-
 /* Keep a list of endings to be found. */
-static Ending_details *endings_to_match = NULL;
+static Material_details *endings_to_match = NULL;
 
 /* What kind of piece is the character, c, likely to represent?
  * NB: This is NOT the same as is_piece() in decode.c
@@ -117,10 +82,10 @@ is_English_piece(char c)
 /* Initialise the count of required pieces prior to reading
  * in the data.
  */
-static Ending_details *
+static Material_details *
 new_ending_details(Boolean both_colours)
 {
-    Ending_details *details = (Ending_details *) malloc_or_die(sizeof (Ending_details));
+    Material_details *details = (Material_details *) malloc_or_die(sizeof (Material_details));
     int c;
     Piece piece;
 
@@ -250,12 +215,12 @@ extract_combination(const char *p, Occurs *p_occurs, int *p_number, const char *
  *        P1>= Exactly one pawn more than the opponent. (colour == BLACK)
  */
 static const char *
-extract_piece_information(const char *line, Ending_details *details, Colour colour)
+extract_piece_information(const char *line, Material_details *details, Colour colour)
 {
     const char *p = line;
     Boolean Ok = TRUE;
 
-    while (Ok && (*p != '\0') && !isspace((int) *p)) {
+    while (Ok && (*p != '\0') && !isspace((int) *p) && *p != MATERIAL_CONSTRAINT) {
         Piece piece = is_English_piece(*p);
         /* By default a piece should occur exactly once. */
         Occurs occurs = EXACTLY;
@@ -325,7 +290,7 @@ extract_piece_information(const char *line, Ending_details *details, Colour colo
  * details with the pattern information.
  */
 static Boolean
-decompose_line(const char *line, Ending_details *details)
+decompose_line(const char *line, Material_details *details)
 {
     const char *p = line;
     Boolean Ok = TRUE;
@@ -354,7 +319,7 @@ decompose_line(const char *line, Ending_details *details)
     /* Extract two pairs of piece information. */
     p = extract_piece_information(p, details, WHITE);
     if (p != NULL) {
-        while ((*p != '\0') && isspace((int) *p)) {
+        while ((*p != '\0') && (isspace((int) *p) || (*p == MATERIAL_CONSTRAINT))) {
             p++;
         }
         if (*p != '\0') {
@@ -385,7 +350,7 @@ decompose_line(const char *line, Ending_details *details)
  * started matching any yet.
  */
 static void
-reset_match_depths(Ending_details *endings)
+reset_match_depths(Material_details *endings)
 {
     for (; endings != NULL; endings = endings->next) {
         endings->match_depth[WHITE] = 0;
@@ -445,7 +410,7 @@ piece_match(int num_available, int num_to_find, int num_opponents, Occurs occurs
  * set of details_to_find.
  */
 static Boolean
-piece_set_match(Ending_details *details_to_find,
+piece_set_match(const Material_details *details_to_find,
         int num_pieces[2][NUM_PIECE_VALUES],
         Colour game_colour, Colour piece_set_colour)
 {
@@ -502,12 +467,12 @@ piece_set_match(Ending_details *details_to_find,
     return match;
 }
 
-/* Look for an ending match between current_details and
+/* Look for a material match between current_details and
  * details_to_find. Only return TRUE if we have both a match
  * and match_depth >= move_depth in details_to_find.
  */
 static Boolean
-ending_match(Ending_details *details_to_find, int num_pieces[2][NUM_PIECE_VALUES],
+material_match(Material_details *details_to_find, int num_pieces[2][NUM_PIECE_VALUES],
         Colour game_colour)
 {
     Boolean match = TRUE;
@@ -541,13 +506,36 @@ ending_match(Ending_details *details_to_find, int num_pieces[2][NUM_PIECE_VALUES
     return match;
 }
 
+/* Extract the numbers of each type of piece from the given board. */
+static void extract_pieces_from_board(int num_pieces[2][NUM_PIECE_VALUES], const Board *board)
+{
+    /* Set up num_pieces from the board. */
+    for(int c = 0; c < 2; c++) {
+        for(int p = 0; p < NUM_PIECE_VALUES; p++) {
+            num_pieces[c][p] = 0;
+        }
+    }
+    for(char rank = FIRSTRANK; rank <= LASTRANK; rank++) {
+        for(char col = FIRSTCOL; col <= LASTCOL; col++) {
+            int r = RankConvert(rank);
+            int c = ColConvert(col);
+
+            Piece coloured_piece = board->board[r][c];
+            if(coloured_piece != EMPTY) {
+                int p = EXTRACT_PIECE(coloured_piece);
+                num_pieces[EXTRACT_COLOUR(coloured_piece)][p]++;
+            }
+        }
+    }
+}
+
 /* Check to see whether the given moves lead to a position
  * that matches the given 'ending' position.
  * In other words, a position with the required balance
  * of pieces.
  */
 static Boolean
-look_for_ending(Game *game_details, Ending_details *details_to_find)
+look_for_material_match(Game *game_details, Material_details *details_to_find)
 {
     Boolean game_ok = TRUE;
     Boolean match_comment_added = FALSE;
@@ -564,24 +552,7 @@ look_for_ending(Game *game_details, Ending_details *details_to_find)
     Board *board = new_game_board(game_details->tags[FEN_TAG]);
 
     if(game_details->tags[FEN_TAG] != NULL) {
-        /* Set up num_pieces from the board. */
-        for(int c = 0; c < 2; c++) {
-            for(int p = 0; p < NUM_PIECE_VALUES; p++) {
-                num_pieces[c][p] = 0;
-            }
-        }
-        for(char rank = FIRSTRANK; rank <= LASTRANK; rank++) {
-            for(char col = FIRSTCOL; col <= LASTCOL; col++) {
-                int r = RankConvert(rank);
-                int c = ColConvert(col);
-
-                Piece coloured_piece = board->board[r][c];
-                if(coloured_piece != EMPTY) {
-                    int p = EXTRACT_PIECE(coloured_piece);
-                    num_pieces[EXTRACT_COLOUR(coloured_piece)][p]++;
-                }
-            }
-        }
+        extract_pieces_from_board(num_pieces, board);
     }
     /* Ensure that all previous match indications are cleared. */
     reset_match_depths(endings_to_match);
@@ -599,9 +570,9 @@ look_for_ending(Game *game_details, Ending_details *details_to_find)
 	 * then we might miss a match because a full match takes several
          * separate individual match steps.
 	 */
-	white_matches = ending_match(details_to_find, num_pieces, WHITE);
+	white_matches = material_match(details_to_find, num_pieces, WHITE);
         if(details_to_find->both_colours) {
-            black_matches = ending_match(details_to_find, num_pieces, BLACK);
+            black_matches = material_match(details_to_find, num_pieces, BLACK);
         }
         else {
             black_matches = FALSE;
@@ -651,7 +622,7 @@ look_for_ending(Game *game_details, Ending_details *details_to_find)
         else {
             /* An empty move. */
             fprintf(GlobalState.logfile,
-                    "Internal error: Empty move in look_for_ending.\n");
+                    "Internal error: Empty move in look_for_material_match.\n");
             game_ok = FALSE;
         }
     }
@@ -669,22 +640,47 @@ look_for_ending(Game *game_details, Ending_details *details_to_find)
 }
 
 /* Check to see whether the given moves lead to a position
- * that matches one of the required 'ending' position.
+ * that matches one of the required 'material match' positions.
  * In other words, a position with the required balance
  * of pieces.
  */
 Boolean
-check_for_ending(Game *game)
+check_for_material_match(Game *game)
 {
     /* Match if there are no endings to match. */
     Boolean matches = (endings_to_match == NULL) ? TRUE : FALSE;
-    Ending_details *details;
+    Material_details *details;
 
     for (details = endings_to_match; !matches && (details != NULL);
             details = details->next) {
-        matches = look_for_ending(game, details);
+        matches = look_for_material_match(game, details);
     }
     return matches;
+}
+
+/* Does the board's material match the constraints of details_to_find?
+ * Return TRUE if it does, FALSE otherwise.
+ */
+Boolean
+constraint_material_match(Material_details *details_to_find, const Board *board)
+{
+    /* Only a single match position is required. */
+    details_to_find->move_depth = 0;
+    details_to_find->match_depth[0] = 0;
+    details_to_find->match_depth[1] = 0;
+
+    int num_pieces[2][NUM_PIECE_VALUES];
+    extract_pieces_from_board(num_pieces, board);
+    Boolean white_matches = material_match(details_to_find, num_pieces, WHITE);
+    Boolean black_matches;
+
+    if(details_to_find->both_colours) {
+        black_matches = material_match(details_to_find, num_pieces, BLACK);
+    }
+    else {
+        black_matches = FALSE;
+    }
+    return white_matches || black_matches;
 }
 
 /* Decompose the text of line to extract two sets of
@@ -693,27 +689,34 @@ check_for_ending(Game *game)
  * for both colours in each configuration.
  * Otherwise, the first set of pieces are assumed to
  * be white and the second to be black.
+ * If pattern_constraint is TRUE then the description
+ * is a constraint of a FEN pattern and should not be
+ * retained as a separate material match.
  */
-Boolean
-process_ending_line(const char *line, Boolean both_colours)
+Material_details *
+process_material_description(const char *line, Boolean both_colours, Boolean pattern_constraint)
 {
-    Boolean Ok = TRUE;
+    Material_details *details = NULL;
 
     if (non_blank_line(line)) {
-        Ending_details *details = new_ending_details(both_colours);
+        details = new_ending_details(both_colours);
 
         if (decompose_line(line, details)) {
-            /* Add it on to the list. */
-            details->next = endings_to_match;
-            endings_to_match = details;
+            if(!pattern_constraint) {
+                /* Add it on to the list. */
+                details->next = endings_to_match;
+                endings_to_match = details;
+            }
         }
         else {
-            Ok = FALSE;
+            (void) free((void *) details);
+            details = NULL;
         }
     }
-    return Ok;
+    return details;
 }
 
+/* Read a file containing material matches. */
 Boolean
 build_endings(const char *infile, Boolean both_colours)
 {
@@ -727,7 +730,9 @@ build_endings(const char *infile, Boolean both_colours)
     else {
         char *line;
         while ((line = read_line(fp)) != NULL) {
-            Ok &= process_ending_line(line, both_colours);
+            if(process_material_description(line, both_colours, FALSE) == NULL) {
+                Ok = FALSE;
+            }
             (void) free(line);
         }
         (void) fclose(fp);

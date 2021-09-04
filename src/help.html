@@ -18,7 +18,7 @@
   <div id="banner">
 <h1><a href="https://www.cs.kent.ac.uk/~djb/pgn-extract">pgn-extract</a>:<br />
 A Portable Game Notation (PGN) Manipulator for Chess Games<br />
-Version 19-04 by
+Version 21-02 by
 <a href="https://www.cs.kent.ac.uk/~djb/">David J. Barnes</a></h1>
   </div>
 </div>
@@ -71,30 +71,36 @@ the binary working, there is <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract
 	<ul>
 	<li><a href="#output">Output files (-o, --output, -a, --append)</a>
 	<li><a href="#separate-output">Separate output files (-#, -E)</a>
-	<li><a href="#-l">Log files (-l, -L)</a>
-	<li><a href="#-f">File of PGN files (-f)</a>
 	<li><a href="#-A">Storing argument descriptions in a file (-A)</a>
+	<li><a href="#-f">File of PGN files (-f)</a>
+	<li><a href="#-l">Log files (-l, -L)</a>
 	</ul>
     <li><a href="#-r">Check for errors (-r)</a>
     <li>Match criteria:
 	<ul>
 	<li><a href="#variations">Variation criteria</a>:
 	    <ul>
-		<li><a href="#-x">Positional variations (-x)</a>
-		<li><a href="#-v">Textual variations (-v)</a>
-		<li><a href="#-P">Textual variation permutations (-P)</a>
                 <li><a href="#fen-t">FEN positional matches with -t</a>
                 <li><a href="#-H">polyglot hashcode matches (-H)</a>
+                <li><a href="#fenpattern">Match games reaching a position matching the associated FEN pattern
+                            (--fenpattern)</a>
+                <li><a href="#fenpattern">Match games reaching a position matching the associated FEN pattern for either side
+                            (--fenpatterni)</a>
                 <li><a href="#matchplylimit">Limit the ply depth to which matches are sought</a>
+		<li><a href="#-P">Textual variation permutations (-P)</a>
+		<li><a href="#-v">Textual variations (-v)</a>
+		<li><a href="#-x">Positional variations (-x)</a>
 	    </ul>
 	<li><a href="#-t">Tag criteria</a>
 	    <ul>
 	    <li><a href="#date-t">Date and Elo matches with -t</a>
-	    <li><a href="#-T">Tag criteria on the command Line (-T)</a>
 	    <li><a href="#date-T">Date matches with -T</a>
+	    <li><a href="#time-t">TimeControl with -t</a>
             <li><a href="setup-tags">Matching only games with or without SetUp tags</a>
+	    <li><a href="#-T">Tag criteria on the command Line (-T)</a>
 	    </ul>
 	<li><a href="#move-bounds">Setting bounds on the number of moves or ply in a game (-b and -p)</a>
+        <li><a href="#startply">Only start matching after N ply (N &gt;= 1)</a>
 	<li><a href="#-M">Matching only games that end in checkmate
 	    (-M or --checkmate)</a>
         <li><a href="#fifty">Matching only games that include fifty moves with no capture or pawn move (--fifty)</a>
@@ -105,7 +111,7 @@ the binary working, there is <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract
 	<li><a href="#underpromotion">Match only games that contain an
 	underpromotion (--underpromotion)</a>
 	<li><a href="#-S">Soundex matching (-S)</a>
-	<li><a href="#-z">Material matches (-y, -z and --addmatchtag)</a>
+	<li><a href="#-z">Material matches (-y, -z, --materialy, --materialz and --addmatchtag)</a>
 	</ul>
     <li>Duplicate detection:
     <ul>
@@ -136,6 +142,7 @@ the binary working, there is <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract
 	<li><a href="#-R">User-defined tag roster ordering (-R)</a>
 	<li><a href="#addhashcode">Add a tag containing a hashcode for the game (--addhashcode)</a>
 	<li><a href="#fixresulttags">Correct Result tags that conflict with the game outcome (checkmate or stalemate) (--fixresulttags)</a>
+        <li><a href="#fixtagstrings">Attempt to correct tag strings that are not properly terminated (--fixtagstrings)</a>
 	<li><a href="#totalplycount">Add a tag containing the total ply count (--totalplycount)</a>
       </ul>
     <li>Adding annotations to games:
@@ -150,6 +157,7 @@ the binary working, there is <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract
 		    (--hashcomments)</a>
 	<li><a href="#markmatches">Add a game comment for positional
 	and material matches (--markmatches)</a>
+        <li><a href="#linenumbers">Include a comment with a game's line numbers from the input file (--linenumbers)</a>
       </ul>
     <li>Other output features:
     <ul>
@@ -164,7 +172,7 @@ the binary working, there is <a href="https://www.cs.kent.ac.uk/~djb/pgn-extract
         <li><a href="#commentlines">Output each comment on separate lines from moves (--commentlines)</a>
     </ul>
     <li><a href="#keepbroken">Retain games with errors in them (--keepbroken)</a>
-    <li><a href="#nestedcomments">allow nested comments (--nestedcomments)</a>
+    <li><a href="#nestedcomments">Allow nested comments (--nestedcomments)</a>
 
     <li>Documentation:
       <ul>
@@ -267,8 +275,8 @@ of this file before attempting to use pgn-extract in earnest.
         </ul>
       <li>-xvariations - the file variations contains the lines resulting in
              positions of interest.
-      <li>-yendings - the file endings contains the end positions of interest.
-      <li>-zendings - the file endings contains the end positions of interest.
+      <li>-yfile -- file contains a material balance of interest.
+      <li>-zfile -- file contains a material balance of interest.
       <li>-Z - use the file virtual.tmp as an external hash table for duplicates.
             Use when MallocOrDie messages occur with big datasets.
       <li>-#num[,num] - output num games per file, to files named 1.pgn, 2.pgn, etc.
@@ -278,6 +286,7 @@ of this file before attempting to use pgn-extract in earnest.
       <li>--allownullmoves - allow NULL moves in the main line.
       <li>--append - append matched games to an existing output file
             (see <a href="#output">-a</a>).
+      <li>--btm - match position only if Black is to move (see -t)
       <li>--checkfile - Use file as a list of check files for duplicates
 	    (see <a href="#-c">-c</a>).
       <li>--checkmate - only output games that end in checkmate.
@@ -288,17 +297,23 @@ of this file before attempting to use pgn-extract in earnest.
             (see <a href="#duplicates">-a</a>).
       <li>--evaluation - include a position evaluation after each move.
       <li>--fencomments - include a position evaluation after each move.
+      <li>--fenpattern pattern - match games containing the given FEN pattern.
+      <li>--fenpatterni pattern - match games containing the given FEN pattern for either side.
       <li>--fifty - only output games that include fifty moves with no capture or pawn move.
       <li>--fixresulttags - correct Result tags that conflict with the game outcome (checkmate or stalemate).
+      <li>--fixtagstrings - attempt to correct tag strings that are not properly terminated.
       <li>--fuzzydepth plies - positional duplicates match.
       <li>--hashcomments - output a polyglot hashcode comment after each move.
       <li>--help - see <a href="#-h">-h</a>
       <li>--keepbroken - retain games with errors.
       <li>--linelength - see <a href="#-w">-w</a>
+      <li>--linenumbers marker - include a comment with the source line numbers of each game { marker:start:end }
       <li>--markmatches comment - mark positional and material matches with
       the given comment.
       <li>--matchplylimit - maximum ply depth to search for positional matches,
       see <a href="#fen-t">-t</a>, <a href="-x">-x</a>
+      <li>--materialy material - material is a string describing a material balance; see <a href="#-y">-z</a>.
+      <li>--materialz material - material is a string describing a material balance; see <a href="#-z">-z</a>.
       <li>--nobadresults - reject games with inconsistent result indications.
       <li>--nochecks - don't output + and # after moves.
       <li>--nocomments - see <a href="#-C">-C</a>
@@ -323,10 +338,12 @@ of this file before attempting to use pgn-extract in earnest.
       <li>--skipmatching range[,range ...] - don't output the selected matched game(s)
       <li>--splitvariants [depth] - output each variation (to the given depth) as a separate game.
       <li>--stalemate - only output games that end in stalemate.
+      <li>--startply N - only start matching after N ply (N &gt;= 1).
       <li>--stopafter N - stop after matching N games (N &gt; 0)
       <li>--tagsubstr - match in any part of a tag (see <a href="#-T">-T</a> and <a href="#-t">-t</a>).
       <li>--totalplycount - include a tag with the total number of plies in a game.
       <li>--version - print current version number and exit.
+      <li>--wtm - match position only if White is to move (see -t)
       <li>--xroster - don't output tags not included with the -R option (see <a href="#-R">-R</a>).
 </ul>
 
@@ -670,6 +687,11 @@ pgn-extract -Hcdd6cd2d4e4045e --matchplylimit 12 games.pgn
 to the specified hashcode.
 <p>Note that usage of the <a href="#-x">-x</a> flag also limits the search depth.
 
+<h2 id="startply">Only start matching after N ply (N &gt;= 1)</h2>
+<p>The --startply argument defers match attempts until the move at the given ply is played.
+A value of 1 would start matching from the first move of the game, whereas a value of 3 would
+only attempt matches after both players had played their first moves.
+
 <h2 id="duplicates">Duplicate games (-d, --duplicates and -D or --noduplicates, plus -Z)</h2>
 <p>If either the -d, --duplicates or -D flag is used, pgn-extract
 attempts to recognise duplicate extracted games.
@@ -916,6 +938,9 @@ FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"
 </pre>
 <p>However, note that it is only the board position that is relevant for the match.
 Castling rights are not considered in the determination of equality.
+<p>The <code>--btm</code> and <code>--wtm</code> flags can be used to constrain the match
+by whether it is 'black to move' or 'white to move'. Otherwise, the player to
+move information is ignored.
 <p>See details of <a href="#-F">the -F flag</a> for a simple way to generate a FEN
 description from a game score.
 
@@ -991,17 +1016,26 @@ FENPatternI "?????rk?/?????pbp/*p?/*/*/8/PPP*/??KR????" castled
 a fianchetto and Black has castled queenside.
 <p>See also <a href="#FEN-T">-Tf</a> for a simpler command-line version of FEN pattern matching.
 
+<li id="fenpattern">--fenpattern and --fenpatterni: Match games reaching a position matching the associated FEN pattern<br />
+<p>The --fenpattern and --fenpatterni command-line arguments are followed by a single string containing
+a FEN pattern to be matched. These arguments may appear multiple times.
+See <a href="#FENPattern-t">-t with FENPattern</a> for details of the patterns.
+
 <li id="date-t"><p>Date and Elo Matches with -t<br />
 <p>From a <a href="#-t">-t tag file</a>,
 more complex matching of dates and Elo values may be performed by
 placing an operator between the tag name and the tag string to be
-matched:
+matched.
+For date matches:
 <pre>
 Date &lt; "1962"
 </pre>
-<p>would only match games played before 1962. Only the year value
-participates in the matching process, as this is done using integer
-values rather than strings.
+<p>would only match games played before 1962. Month and day values may also be
+included for additional granularity; e.g.:
+<pre>
+Date &gt; "2020.03.31"
+</pre>
+<p>Elo matches use a similar syntax:
 <pre>
 WhiteElo &gt;= "2500"
 </pre>
@@ -1015,6 +1049,28 @@ Elo &gt;= "2500"
 relationship.
 The operators allowed are &gt;, &gt;=, &lt;, &lt;=, =, and &lt;&gt; (not
 equal to).
+
+<li id="time-t"><p>TimeControl with -t<br />
+<p>The -t option also supports very limited relational matching of two formats of the
+TimeControl tag: <em>time+increment</em> and <em>moves+time</em>.
+In both cases it is the <em>time</em> value of the control that is compared
+against a numerical value.
+For instance,
+<pre>
+TimeControl &gt;= "3600"
+</pre>
+<p>would match games with a TimeControl tag in which the <em>time</em> value
+is greater-than or equal to 3600 seconds. 
+For instance,
+<pre>
+[TimeControl "4500+60"]
+</pre>
+<p>and
+<pre>
+[TimeControl "40/9000"]
+</pre>
+<p>The operators allowed are &gt;, &gt;=, &lt;, &lt;=, =, and &lt;&gt; (not equal to).
+<p>Only the first descriptor in a tag value is compared.
 </ul>
 
 <h2 id="-T">Tag criteria on the command line (-T)</h2>
@@ -1067,17 +1123,17 @@ with ECO classification A01 (Nimzo-Larsen attack), for instance.
 <ul>
 <li id="date-T"><p>Date Matches with -T<br />
 <p>A simple form of relational date matching is available.
-A date year may be prefixed with either 'b' or 'a' in order
+A date may be prefixed with either 'b' or 'a' in order
 to match games played either before or after the specified date. This
 assumes that the date is stored in the game's date tag string in the
-normal form: YYYY.MM.DD
+normal form: YYYY.MM.DD and the day or month/day values are optional.
 
 <p>So,
 <pre>
-pgn-extract -Tdb1962 file.pgn
+pgn-extract -Tdb1962.01 file.pgn
 </pre>
-<p>will look for games played before 1962. A much fuller capability
-is available in tag files with <a href="#-t">the -t flag</a>.
+<p>will look for games played before 1st January 1962.
+A fuller capability is available in tag files with <a href="#-t">the -t flag</a>.
 
 <li id="FEN-T">FEN Pattern matches with -T<br />
 <p>The -Tf flag allows a form of position matching similar to that
@@ -1637,6 +1693,16 @@ outputs the moves in what I believe to be (or used to be) ChessMaster format.
 end of a comment so that comments appear on separate lines from the game
 text.
 
+<h2 id="linenumbers">Include a comment with a game's line numbers from the input file</h2>
+<p>The --linenumbers argument is followed by a marker string and the result is that a comment is added
+to each matched game between the tags and the moves. The comment contains the marker string and the start
+and end line numbers of where the game originated from in its input file.
+For instance:
+<pre>
+pgn-extract --linenumbers marker games.pgn
+</pre>
+<p>would include comments such as <code>{ marker:1:20 }</code> and <code>{ marker:22:35 }</code>.
+
 <h2 id="-F">Forsyth-Edwards Notation (FEN) descriptions (-F)</h2>
 <p>The -F flag provides a way to generate
 a suitable FEN description of an arbitrary position.
@@ -1708,10 +1774,13 @@ is required to output a FEN string.
 <p>See <a href="#fencomments">--fencomments</a> for the option to add
 a FEN comment after every move, including the final one.
 
-<h2 id="-z">Material matches (-y, -z and --addmatchtag)</h2>
+<h2 id="-z">Material matches (-y, -z, --materialy, --materialz and --addmatchtag)</h2>
 <p>The -y and -z flags take a filename of material balances for which you
 wish to search in games.
-The basic structure of the file is one or more lines of the form
+The --materialy and --materialz arguments offer command-line alternatives to
+using a file.
+<p>The basic structure of the file is one or more lines describing a material
+balance of the form
 <pre>
 pieces1 pieces2
 </pre>
@@ -1728,12 +1797,12 @@ letters is immaterial, there is no need to include Kings in the
 description, and the order of the pieces does not matter.  Apart from
 Kings, if a piece letter is not listed for a side then that piece
 is not present within that side's material.
-With the -z flag, a match will be tested for from both White and Black's point of view,
+With the -z and --materialz flags, a match will be tested for from both White and Black's point of view,
 so with -z the example above matches the same games as:
 <pre>
 bn pr
 </pre>
-<p>However, if this is used with the -y flag then only games in which Black
+<p>However, if this is used with the -y or --materialy flag then only games in which Black
 has the Rook will be searched for.
 <p>Further notation may be added after any piece letter, typically to
 indicate something about the number of occurrences of that piece on one
@@ -1825,10 +1894,16 @@ q*r*b2n0p* q=r=b0n2p=
 <p>the -y flag would find all games where White had a Bishop pair and Black had two Knights,
 whereas the -z flag would find all BB vs NN games for both sides.
 
-<p>The --addmatchtag argument can be used with -z to add a MaterialMatch tag
+With both --materialz and --materialy the full pattern must be supplied as a single command-line
+string; for instance:
+<pre>
+pgn-extract --materialz "q*r*b2n0p* q=r=b0n2p=" games.pgn
+</pre>
+
+<p>The --addmatchtag argument can be used with -z or --materialz to add a MaterialMatch tag
 pair to a game. The associated string will be "White" if pieces1 matches the
 White pieces or "Black" if pieces1 matches the black pieces.
-If this argument is used with -y then the associated string will always be
+If this argument is used with -y or --materialy then the associated string will always be
 "White" so there is no point combining --addmatchtag with -y.
 
 <p>A comment line may be placed in a material balance file by using a '%'
@@ -1961,6 +2036,10 @@ produce the same hash code.
 the value in the Result tag to match the game outcome and don't report the inconsistency.
 <p>Inconsistencies between the result tag and terminating result are resolved in favour of
     the terminating result when either is "*".
+
+<h2 id="fixtagstrings">Attempt to correct tag strings that are not properly terminated (--fixtagstrings).</h2>
+<p>Tag strings sometimes contain extra, unescaped quote characters within them.
+This option attempts to fix those errors.
 
 <h2 id="plycount">Add a PlyCount tag (--plycount)</h2>
 <p>Add the tag PlyCount to the tags. This contains a count of
@@ -2107,7 +2186,7 @@ href="#portability">Portability</a>).
     <td>typedef.h</td><td>type definitions.</td>
     </tr>
     <tr>
-    <td>zobrist.[ch[</td><td>code for generating Zobrist hash values for board positions.</td>
+    <td>zobrist.[ch]</td><td>code for generating Zobrist hash values for board positions.</td>
     </tr>
 </table>
 
@@ -2152,7 +2231,7 @@ for his work on developing the PGN standard.
 <h2 id="license">License</h2>
 <p>pgn-extract: a Portable Game Notation (PGN) extractor.<br>
 This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
-Copyright (C) 1994-2019 David J. Barnes
+Copyright (C) 1994-2021 David J. Barnes
 <p>pgn-extract is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -2178,11 +2257,11 @@ or via
 
   <div id="footer">
 <address>
-<p>Copyright (C) 1994-2019 David J. Barnes<br />
+<p>Copyright (C) 1994-2021 David J. Barnes<br />
 <a href="mailto:d.j.barnes@kent.ac.uk">d.j.barnes@kent.ac.uk</a><br />
 <a href="https://www.cs.kent.ac.uk/~djb/">https://www.cs.kent.ac.uk/~djb/</a><br />
-Date of this version: 22 Apr 2019<br>
-Version Number: 19-04<br>
+Date of this version: 27th January 2021<br>
+Version Number: 21-02<br>
 </address>
   </div>
 </div>

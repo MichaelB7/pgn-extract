@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 
 void *malloc_or_die(size_t nbytes);
 void *realloc_or_die(void *space,size_t nbytes);
+char *copy_string(const char *str);
 
 #endif	// MYMALLOC_H
 

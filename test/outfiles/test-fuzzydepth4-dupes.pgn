@@ -1,5 +1,3 @@
-{ From: infiles/test-fuzzydepth.pgn }
-{ First found in: infiles/test-fuzzydepth.pgn }
 [Event "?"]
 [Site "?"]
 [Date "????.??.??"]
@@ -8,9 +6,8 @@
 [Black "?"]
 [Result "*"]
 
-1. Nf3 Nc6 2. e4 e5 { Match game 1 at 4 ply. } 3. Bc4 *
+1. Nf3 Nc6 2. e4 e5 3. Bc4 *
 
-{ First found in: infiles/test-fuzzydepth.pgn }
 [Event "?"]
 [Site "?"]
 [Date "????.??.??"]
@@ -19,5 +16,5 @@
 [Black "?"]
 [Result "*"]
 
-1. e4 e5 2. Nf3 { Match game 1 at 3 and 4 ply. } 2... Nc6 3. d4 *
+1. e4 e5 2. Nf3 Nc6 3. d4 *
 

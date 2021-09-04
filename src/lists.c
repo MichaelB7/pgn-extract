@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -74,7 +74,8 @@ static StringArray *TagLists;
 static int tag_list_length = 0;
 
 static char *soundex(const char *str);
-static Boolean check_list(int tag, const char *tag_string, StringArray *list);
+static Boolean check_list(int tag, const char *tag_string, const StringArray *list);
+static Boolean check_time_period(const char *tag_string, unsigned period, const StringArray *list);
 
 void init_tag_lists(void)
 {
@@ -355,6 +356,9 @@ extract_tag_argument(const char *argstr)
         case 'r':
             add_tag_to_list(RESULT_TAG, arg, NONE);
             break;
+        case 't':
+            add_tag_to_list(TIME_CONTROL_TAG, arg, NONE);
+            break;
         case 'w':
             add_tag_to_list(WHITE_TAG, arg, NONE);
             break;
@@ -381,7 +385,7 @@ extract_tag_argument(const char *argstr)
 #define MAXDATE 3000
 
 static Boolean
-check_date(const char *date_string, StringArray *list)
+check_date(const char *date_string, const StringArray *list)
 {
     unsigned list_index;
 
@@ -390,74 +394,182 @@ check_date(const char *date_string, StringArray *list)
      * The first match is used to set wanted properly for the first time.
      */
     Boolean wanted = FALSE;
-    for (list_index = 0; list_index < list->num_used_elements; list_index++) {
-        const char *list_string = list->tag_strings[list_index].tag_string;
-        TagOperator operator = list->tag_strings[list_index].operator;
+    unsigned game_year, game_month = 1, game_day = 1;
+    if(sscanf(date_string, "%u", &game_year) == 1) {
+	/* Try to extract month and day from the game's date string. */
+	sscanf(date_string, "%*u.%u.%u", &game_month, &game_day);
+	unsigned encoded_game_date = 10000 * game_year + 100 * game_month + game_day;
+	for (list_index = 0; list_index < list->num_used_elements; list_index++) {
+	    const char *list_string = list->tag_strings[list_index].tag_string;
+	    TagOperator operator = list->tag_strings[list_index].operator;
 
-        if (*list_string == 'b') {
-            operator = LESS_THAN;
-            list_string++;
-        }
-        else if (*list_string == 'a') {
-            operator = GREATER_THAN;
-            list_string++;
-        }
-        else {
-            /* No prefix. */
-        }
-        if (operator != NONE) {
-            /* We have a relational comparison. */
-            unsigned game_date, list_date;
-            /* Try to extract dates from both strings. */
-            if ((sscanf(list_string, "%u", &list_date) == 1) &&
-                    (sscanf(date_string, "%u", &game_date) == 1) &&
-                    (game_date > MINDATE) && (game_date < MAXDATE)) {
-                Boolean matches;
-                switch (operator) {
-                    case LESS_THAN:
-                        matches = game_date < list_date;
-                        break;
-                    case LESS_THAN_OR_EQUAL_TO:
-                        matches = game_date <= list_date;
-                        break;
-                    case GREATER_THAN:
-                        matches = game_date > list_date;
-                        break;
-                    case GREATER_THAN_OR_EQUAL_TO:
-                        matches = game_date >= list_date;
-                        break;
-                    case EQUAL_TO:
-                        matches = game_date == list_date;
-                        break;
-                    case NOT_EQUAL_TO:
-                        matches = game_date != list_date;
-                        break;
-                    case NONE:
-                    default:
-                        /* Should have been covered above. */
-                        matches = FALSE;
-                        break;
-                }
-                if (list_index == 0) {
-                    wanted = matches;
-                }
-                else {
-                    wanted = wanted && matches;
-                }
-            }
-            else {
-                /* Bad format, or out of range. Assume not wanted. */
-                wanted = FALSE;
-		fprintf(GlobalState.logfile, "Failed to extract to ints.\n");
-            }
-        }
-        else {
-            /* No need to check if we already have a match. */
-            if (list_index == 0 || !wanted) {
-                /* Just a straight prefix match. */
-                wanted = strncmp(date_string, list_string, strlen(list_string)) == 0;
-            }
-        }
+	    if (*list_string == 'b') {
+		operator = LESS_THAN;
+		list_string++;
+	    }
+	    else if (*list_string == 'a') {
+		operator = GREATER_THAN;
+		list_string++;
+	    }
+	    else {
+		/* No prefix. */
+	    }
+	    if (operator != NONE) {
+		/* We have a relational comparison. */
+		unsigned list_year, list_month = 1, list_day = 1;
+		if (sscanf(list_string, "%u", &list_year) == 1) {
+		    if((game_year > MINDATE) && (game_year < MAXDATE)) {
+			sscanf(list_string, "%*u.%u.%u", &list_month, &list_day);
+			unsigned encoded_list_date = 10000 * list_year + 100 * list_month + list_day;
+			Boolean matches;
+			switch (operator) {
+			    case LESS_THAN:
+				matches = encoded_game_date < encoded_list_date;
+				break;
+			    case LESS_THAN_OR_EQUAL_TO:
+				matches = encoded_game_date <= encoded_list_date;
+				break;
+			    case GREATER_THAN:
+				matches = encoded_game_date > encoded_list_date;
+				break;
+			    case GREATER_THAN_OR_EQUAL_TO:
+				matches = encoded_game_date >= encoded_list_date;
+				break;
+			    case EQUAL_TO:
+				matches = encoded_game_date == encoded_list_date;
+				break;
+			    case NOT_EQUAL_TO:
+				matches = encoded_game_date != encoded_list_date;
+				break;
+			    case NONE:
+			    default:
+				/* Should have been covered above. */
+				matches = FALSE;
+				break;
+			}
+			if (list_index == 0) {
+			    wanted = matches;
+			}
+			else {
+			    wanted = wanted && matches;
+			}
+		    }
+		    else {
+			/* Bad format, or out of range. Assume not wanted.
+			 * Don't report the bad date in the game.
+			 */
+			wanted = FALSE;
+		    }
+		}
+		else {
+		    /* Bad format. Assume not wanted. */
+		    wanted = FALSE;
+		    /* While this will give an error for each game, a bad date
+		     * in the list of tags to be matched needs reporting.
+		     */
+		    fprintf(GlobalState.logfile,
+			    "Failed to extract year from %s.\n", list_string);
+		}
+	    }
+	    else {
+		/* No need to check if we already have a match. */
+		if (list_index == 0 || !wanted) {
+		    /* Just a straight prefix match. */
+		    wanted = strncmp(date_string, list_string, strlen(list_string)) == 0;
+		}
+	    }
+	}
+    }
+    return wanted;
+}
+
+/* Check whether the TimeControl value matches the requirements. */
+static Boolean
+check_time_control(const char *tc_string, const StringArray *list)
+{
+    Boolean wanted = FALSE;
+    if(*tc_string == '\0' || *tc_string == '?' || *tc_string == '-') {
+        /* Nothing to compare. */
+    }
+    else {
+        /* Examine just the first if there are multiple controls. */
+	char *control = copy_string(tc_string);
+	char *sep = strchr(control, ':');
+	if(sep != NULL) {
+	    *sep = '\0';
+	}
+	if(strchr(control, '+') != NULL) {
+	    /* Period+increment. */
+	    unsigned period;
+	    if(sscanf(control,"%u", &period) == 1) {
+		wanted = check_time_period(control, period, list);
+	    }
+	}
+	else {
+	    /* Look for the format moves/seconds. */
+	    char *slash = strchr(control, '/');
+	    if(slash != NULL) {
+		unsigned period;
+		if(sscanf(slash + 1, "%u", &period) == 1) {
+		    wanted = check_time_period(control, period, list);
+		}
+	    }
+	}
+	(void) free((void *) control);
+    }
+    return wanted;
+}
+
+/* Compare the given time period against those provided for matches.
+ * Return TRUE if a match is found.
+ */
+static Boolean
+check_time_period(const char *tag_string, unsigned period, const StringArray *list)
+{
+    Boolean wanted = FALSE;
+    unsigned list_index;
+    for (list_index = 0; (list_index < list->num_used_elements) && !wanted; list_index++) {
+	const char *list_string = list->tag_strings[list_index].tag_string;
+	TagOperator operator = list->tag_strings[list_index].operator;
+
+	if (operator != NONE) {
+	    /* We have a relational comparison. */
+	    unsigned list_period;
+	    if ((sscanf(list_string, "%u", &list_period) == 1)) {
+		switch (operator) {
+		    case LESS_THAN:
+			wanted = period < list_period;
+			break;
+		    case LESS_THAN_OR_EQUAL_TO:
+			wanted = period <= list_period;
+			break;
+		    case GREATER_THAN:
+			wanted = period > list_period;
+			break;
+		    case GREATER_THAN_OR_EQUAL_TO:
+			wanted = period >= list_period;
+			break;
+		    case EQUAL_TO:
+			wanted = period == list_period;
+			break;
+		    case NOT_EQUAL_TO:
+			wanted = period != list_period;
+			break;
+		    case NONE:
+			/* Already covered above. */
+			break;
+		}
+	    }
+	    else {
+		/* Bad format. */
+	    }
+	}
+	else {
+	    /* Just a straight prefix match. */
+	    if (strncmp(tag_string, list_string, strlen(list_string)) == 0) {
+		wanted = TRUE;
+	    }
+	}
     }
     return wanted;
 }
@@ -470,52 +582,52 @@ check_elo(const char *elo_string, StringArray *list)
 {
     unsigned list_index;
     Boolean wanted = FALSE;
+    unsigned game_elo;
+    if(sscanf(elo_string, "%u", &game_elo) == 1) {
+	for (list_index = 0; (list_index < list->num_used_elements) && !wanted; list_index++) {
+	    const char *list_string = list->tag_strings[list_index].tag_string;
+	    TagOperator operator = list->tag_strings[list_index].operator;
 
-    for (list_index = 0; (list_index < list->num_used_elements) && !wanted; list_index++) {
-        const char *list_string = list->tag_strings[list_index].tag_string;
-        TagOperator operator = list->tag_strings[list_index].operator;
-
-        if (operator != NONE) {
-            /* We have a relational comparison. */
-            unsigned game_elo, list_elo;
-            /* Try to extract elos from both strings. */
-            if ((sscanf(list_string, "%u", &list_elo) == 1) &&
-                    (sscanf(elo_string, "%u", &game_elo) == 1)) {
-                switch (operator) {
-                    case LESS_THAN:
-                        wanted = game_elo < list_elo;
-                        break;
-                    case LESS_THAN_OR_EQUAL_TO:
-                        wanted = game_elo <= list_elo;
-                        break;
-                    case GREATER_THAN:
-                        wanted = game_elo > list_elo;
-                        break;
-                    case GREATER_THAN_OR_EQUAL_TO:
-                        wanted = game_elo >= list_elo;
-                        break;
-                    case EQUAL_TO:
-                        wanted = game_elo == list_elo;
-                        break;
-                    case NOT_EQUAL_TO:
-                        wanted = game_elo != list_elo;
-                        break;
-                    case NONE:
-                        /* Already covered above. */
-                        break;
-                }
-            }
-            else {
-                /* Bad format, or out of range. Assume not wanted. */
-                wanted = FALSE;
-            }
-        }
-        else {
-            /* Just a straight prefix match. */
-            if (strncmp(elo_string, list_string, strlen(list_string)) == 0) {
-                wanted = TRUE;
-            }
-        }
+	    if (operator != NONE) {
+		/* We have a relational comparison. */
+		unsigned list_elo;
+		if ((sscanf(list_string, "%u", &list_elo) == 1)) {
+		    switch (operator) {
+			case LESS_THAN:
+			    wanted = game_elo < list_elo;
+			    break;
+			case LESS_THAN_OR_EQUAL_TO:
+			    wanted = game_elo <= list_elo;
+			    break;
+			case GREATER_THAN:
+			    wanted = game_elo > list_elo;
+			    break;
+			case GREATER_THAN_OR_EQUAL_TO:
+			    wanted = game_elo >= list_elo;
+			    break;
+			case EQUAL_TO:
+			    wanted = game_elo == list_elo;
+			    break;
+			case NOT_EQUAL_TO:
+			    wanted = game_elo != list_elo;
+			    break;
+			case NONE:
+			    /* Already covered above. */
+			    break;
+		    }
+		}
+		else {
+		    /* Bad format, or out of range. Assume not wanted. */
+		    wanted = FALSE;
+		}
+	    }
+	    else {
+		/* Just a straight prefix match. */
+		if (strncmp(elo_string, list_string, strlen(list_string)) == 0) {
+		    wanted = TRUE;
+		}
+	    }
+	}
     }
     return wanted;
 }
@@ -526,7 +638,7 @@ check_elo(const char *elo_string, StringArray *list)
  * the string.
  */
 static Boolean
-check_list(int tag, const char *tag_string, StringArray *list)
+check_list(int tag, const char *tag_string, const StringArray *list)
 {
     unsigned list_index;
     Boolean wanted = FALSE;
@@ -643,10 +755,13 @@ check_tag_details_not_ECO(char *Details[], int num_details)
             else if (TagLists[tag].num_used_elements != 0) {
                 if (Details[tag] != NULL) {
                     if (tag == DATE_TAG) {
-                        wanted = check_date(Details[tag], &TagLists[tag]);
+                        wanted = check_date(Details[tag], &TagLists[DATE_TAG]);
                     }
                     else if ((tag == WHITE_ELO_TAG) || (tag == BLACK_ELO_TAG)) {
                         wanted = check_elo(Details[tag], &TagLists[tag]);
+                    }
+                    else if (tag == TIME_CONTROL_TAG) {
+                        wanted = check_time_control(Details[tag], &TagLists[TIME_CONTROL_TAG]);
                     }
                     else {
                         wanted = check_list(tag, Details[tag], &TagLists[tag]);

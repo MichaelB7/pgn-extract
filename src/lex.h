@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -84,6 +84,7 @@ Boolean open_eco_file(const char *eco_file);
 int yywrap(void);
 void add_filename_to_source_list(const char *filename,SourceFileType file_type);
 void add_filename_list_from_file(FILE *fp,SourceFileType file_type);
+unsigned long get_line_number(void);
 void reset_line_number(void);
 char *next_input_line(FILE *fp);
 LinePair gather_tag(char *line, unsigned char *linep);

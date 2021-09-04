@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@ Boolean apply_move_list(Game *game_details,unsigned *plycount, unsigned max_dept
 Boolean apply_move(Move *move_details, Board *board);
 Boolean apply_eco_move_list(Game *game_details,unsigned *number_of_half_moves);
 Board *rewrite_game(Game *game_details);
-char *copy_string(const char *str);
 void free_board(Board *board);
 Board *new_game_board(const char *fen);
 Board *new_fen_board(const char *fen);

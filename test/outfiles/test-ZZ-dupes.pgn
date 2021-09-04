@@ -1,5 +1,3 @@
-{ From: infiles/petrosian.pgn }
-{ First found in: infiles/fischer.pgn }
 [Event "Bled"]
 [Site "?"]
 [Date "1961"]
@@ -15,7 +13,6 @@ Qe5 c5 21. Qg5 h6 22. Qxc5 Qxc5 23. dxc5 Ke7 24. c6 Rd6 25. Rhe1 Rxc6 26.
 Re5 Ra8 27. Be4 Rd6 28. Bxa8 Rxd1+ 29. Kc2 Rf1 30. Rxa5 Rxf2+ 31. Kb3 Rh2
 32. c5 Kd8 33. Rb5 Rxh3 34. Rb8+ Kc7 35. Rb7+ Kc6 36. Kc4 1-0
 
-{ First found in: infiles/fischer.pgn }
 [Event "USSR-World"]
 [Site "?"]
 [Date "1970"]
@@ -32,7 +29,6 @@ Nxh4 Nf6 27. Ng6+ Bxg6 28. Bxg6 Ke7 29. Qf5 Kd8 30. Rae1 Qc5+ 31. Kh1 Rf8
 32. Qe5 Rc7 33. b4 Qc6 34. c4 dxc4 35. Bf5 Rff7 36. Rd1+ Rfd7 37. Bxd7 Rxd7
 38. Qb8+ Ke7 39. Rde1+ 1-0
 
-{ First found in: infiles/fischer.pgn }
 [Event "USSR-World"]
 [Site "?"]
 [Date "1970"]

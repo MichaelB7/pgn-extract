@@ -7,6 +7,35 @@
   <description>A Portable Game Notation (PGN) manipulator</description>
 
   <item>
+    <title>Version 20-06</title>
+    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-20-06.tgz</link>
+    <description>C source code for version 20-06. win32 binary available from
+    the home page.
+    This version is mainly an end-of-year release to catch up on a few additions
+    since version 20-03.
+    Date matches extended to match on month and day as well as year and a few more
+    command-line options: --fixtagstrings attempts to fix common bad string formats
+    in tag strings; and --wtm/--btm add the requirement for white-to-move/black-to-move
+    in matches.
+    </description>
+    <guid isPermaLink="false">pgn-extract-20-06-announce</guid>
+    <pubDate>18 Dec 2020 21:00:00 GMT</pubDate>
+  </item>
+
+  <item>
+    <title>Version 20-03</title>
+    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-20-03.tgz</link>
+    <description>C source code for version 20-03. win32 binary available from
+    the home page.
+    This version contains a few bug fixes and adds --startply, --fenpattern and --material
+    command-line options.
+    There is also limited relational matching for the TimeControl tag.
+    </description>
+    <guid isPermaLink="false">pgn-extract-20-03-announce</guid>
+    <pubDate>25 July 2020 21:00:00 GMT</pubDate>
+  </item>
+
+  <item>
     <title>Version 19-04</title>
     <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract-19-04.tgz</link>
     <description>C source code for version 19-04. win32 binary available from
@@ -20,17 +49,6 @@
   </item>
 
   <item>
-    <title>Version 18-10</title>
-    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.tgz</link>
-    <description>C source code for version 18-10. win32 binary available from
-    the home page. No major new features. This version cleans up a few things to
-    make the program more robust.
-    </description>
-    <guid isPermaLink="false">pgn-extract-18-10-announce</guid>
-    <pubDate>19 October 2018 18:00:00 GMT</pubDate>
-  </item>
-
-  <item>
     <title>Using pgn-extract to mine chess data</title>
     <link>https://blogs.kent.ac.uk/djb/2018/10/14/data-mining-with-pgn-extract/</link>
     <description>A blog post about using pgn-extract to investigate the
@@ -39,17 +57,6 @@
     </description>
     <guid isPermaLink="false">pgn-extract-data-mining</guid>
     <pubDate>16 October 2018 07:45:00 GMT</pubDate>
-  </item>
-
-  <item>
-    <title>Version 18-08</title>
-    <link>https://www.cs.kent.ac.uk/~djb/pgn-extract/pgn-extract.tgz</link>
-    <description>C source code for version 18-08. win32 binary available from
-    the home page. This version adds: --dropbefore, -y and fixes the missing
-    SetUp tag with --dropply.
-    </description>
-    <guid isPermaLink="false">pgn-extract-18-08-announce</guid>
-    <pubDate>14 October 2018 14:05:00 GMT</pubDate>
   </item>
 
 </channel>

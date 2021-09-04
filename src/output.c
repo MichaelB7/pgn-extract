@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <math.h>
 #include "bool.h"
 #include "defs.h"
 #include "typedef.h"
@@ -81,6 +82,7 @@ static void print_space_separated_str(FILE *outputfile, const char *str);
 static void start_comment(FILE *outputfile);
 static void end_comment(FILE *outputfile);
 static void print_as_comment(FILE *outputfile, const char *str);
+static CommentList *create_line_number_comment(const Game *game);
 
 /* List, the order in which the tags should be output.
  * The first seven should be the Seven Tag Roster that should
@@ -786,7 +788,9 @@ print_move(FILE *outputfile, unsigned move_number, Boolean print_move_number,
                                     /* Nothing more to do at this stage. */
                                     break;
                                 case ENPASSANT_PAWN_MOVE:
-                                    if (output_format == ELALG) {
+                                    if (output_format == ELALG ||
+				          output_format == XLALG ||
+					  output_format == XOLALG) {
                                         strcat(algebraic, "ep");
                                         ind += 2;
                                     }
@@ -1248,6 +1252,12 @@ format_game(Game *current_game, FILE *outputfile)
     /* The final board position, if available. */
     Board *final_board = NULL;
 
+    if(GlobalState.line_number_marker != NULL) {
+	CommentList *comment = create_line_number_comment(current_game);
+	comment->next = current_game->prefix_comment;
+	current_game->prefix_comment = comment;
+    }
+
     /* We need a copy of the final board.
      * Combine the generation of this with a rewrite
      * of the moves of the game into
@@ -1655,4 +1665,33 @@ static void add_hashcode_tag(const Game *game)
         (void) free(game->tags[HASHCODE_TAG]);
     }
     game->tags[HASHCODE_TAG] = copy_string(formatted_code);
+}
+
+/* Determine how many characters needed to format the given number.
+ * Required for accurate space allocation.
+ */
+static unsigned lineNumberChars(unsigned long num)
+{
+    return (unsigned)((ceil(log10(num))+1));
+}
+
+static CommentList *create_line_number_comment(const Game *game)
+{
+    unsigned numbytes = strlen(GlobalState.line_number_marker) + 1 +
+        lineNumberChars(game->start_line) + 1 + lineNumberChars(game->end_line) + 1;
+    char *line_number_comment = (char *) malloc_or_die(numbytes);
+    sprintf(line_number_comment, "%s:%lu:%lu",
+    		GlobalState.line_number_marker,
+		game->start_line,
+		game->end_line);
+    if(numbytes < strlen(line_number_comment) + 1) {
+        fprintf(GlobalState.logfile, "Internal error: insufficient space allocated in create_line_number_comment\n");
+	exit(1);
+    }
+    StringList *current_comment = save_string_list_item(NULL, line_number_comment);
+    CommentList *comment = (CommentList*) malloc_or_die(sizeof (*comment));
+
+    comment->comment = current_comment;
+    comment->next = NULL;
+    return comment;
 }

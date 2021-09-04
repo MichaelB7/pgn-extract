@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ static struct {
 } GameHeader;
 
 static void parse_opt_game_list(SourceFileType file_type);
-static Boolean parse_game(Move **returned_move_list);
+static Boolean parse_game(Move **returned_move_list, unsigned long *start_line, unsigned long *end_line);
 Boolean parse_opt_tag_list(void);
 Boolean parse_tag(void);
 static Move *parse_move_list(void);
@@ -81,7 +81,7 @@ static void setup_for_new_game(void);
 void free_tags(void);
 static void check_result(char **Tags, const char *terminating_result);
 static void deal_with_ECO_line(Move *move_list);
-static void deal_with_game(Move *move_list);
+static void deal_with_game(Move *move_list, unsigned long start_line, unsigned long end_line);
 static Boolean finished_processing(void);
 static void output_game(Game *game,FILE *outputfile);
 static void split_variants(Game *game, FILE *outputfile, unsigned depth);
@@ -278,13 +278,14 @@ static void
 parse_opt_game_list(SourceFileType file_type)
 {
     Move *move_list = NULL;
+    unsigned long start_line, end_line;
 
-    while (parse_game(&move_list) && !finished_processing()) {
+    while (parse_game(&move_list, &start_line, &end_line) && !finished_processing()) {
         if (file_type == NORMALFILE) {
-            deal_with_game(move_list);
+            deal_with_game(move_list, start_line, end_line);
         }
         else if (file_type == CHECKFILE) {
-            deal_with_game(move_list);
+            deal_with_game(move_list, start_line, end_line);
         }
         else if (file_type == ECOFILE) {
             if (move_list != NULL) {
@@ -312,7 +313,7 @@ parse_opt_game_list(SourceFileType file_type)
  * in returned_move_list.
  */
 static Boolean
-parse_game(Move **returned_move_list)
+parse_game(Move **returned_move_list, unsigned long *start_line, unsigned long *end_line)
 { /* Boolean something_found = FALSE; */
     CommentList *prefix_comment;
     Move *move_list = NULL;
@@ -336,9 +337,19 @@ parse_game(Move **returned_move_list)
         free_comment_list(prefix_comment);
         prefix_comment = NULL;
     }
+    *start_line = get_line_number();
     if (parse_opt_tag_list()) {
         /* something_found = TRUE; */
     }
+
+    /* Some games have an initial NAG as a print-board indication.
+     * This is not legal PGN.
+     * Silently delete it/them.
+     */
+    while (current_symbol == NAG) {
+        current_symbol = next_token();
+    }
+
     /* @@@ Beware of comments and/or tags without moves. */
     move_list = parse_move_list();
 
@@ -348,6 +359,7 @@ parse_game(Move **returned_move_list)
 
     /* Look for a result, even if there were no moves. */
     result = parse_result();
+    *end_line = get_line_number();
     if (move_list != NULL) {
         /* Find the last move. */
         Move *last_move = move_list;
@@ -974,13 +986,14 @@ static Boolean consistent_FEN_tags(Game *current_game)
                 /* See if there should be a Variant tag. */
                 /* Look for an initial position found in Chess 960. */
                 if(chess960) {
+		    const char *missing_value = "chess 960";
                     report_details(GlobalState.logfile);
                     fprintf(GlobalState.logfile,
                             "Missing %s Tag for non-standard setup; adding %s.\n",
                             tag_header_string(VARIANT_TAG),
-                            current_game->tags[VARIANT_TAG]);
+			    missing_value);
                     /* Fix the inconsistency. */
-                    current_game->tags[VARIANT_TAG] = copy_string("chess 960");
+                    current_game->tags[VARIANT_TAG] = copy_string(missing_value);
                 }
             }
             else if(chess960) {
@@ -997,7 +1010,7 @@ static Boolean consistent_FEN_tags(Game *current_game)
 }
 
 static void
-deal_with_game(Move *move_list)
+deal_with_game(Move *move_list, unsigned long start_line, unsigned long end_line)
 {
     Game current_game;
     /* We need a dummy argument for apply_move_list. */
@@ -1019,6 +1032,8 @@ deal_with_game(Move *move_list)
     current_game.moves_ok = FALSE;
     current_game.error_ply = 0;
     current_game.position_counts = NULL;
+    current_game.start_line = start_line;
+    current_game.end_line = end_line;
 
     /* Determine whether or not this game is wanted, on the
      * basis of the various selection criteria available.
@@ -1048,7 +1063,7 @@ deal_with_game(Move *move_list)
         apply_move_list(&current_game, &plycount, GlobalState.depth_of_positional_search) &&
         check_move_bounds(plycount) &&
         check_textual_variations(&current_game) &&
-        check_for_ending(&current_game) &&
+        check_for_material_match(&current_game) &&
         check_for_only_checkmate(&current_game) &&
         check_for_only_repetition(current_game.position_counts) &&
         check_ECO_tag(current_game.tags)) {

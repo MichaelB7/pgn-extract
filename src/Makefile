@@ -1,7 +1,7 @@
 # Make file for the pgn-extract program.
 #
 #  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
-#  Copyright (C) 1994-2019 David J. Barnes
+#  Copyright (C) 1994-2021 David J. Barnes
 #
 #  pgn-extract is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ DEBUGINFO=-g
 # Mac OS X users might need to add -D__unix__ to CFLAGS
 # and use CC=cc or CC=gcc
 
-OPTIMISE=-O3 -m64 -mpopcnt -static
+OPTIMISE=-O3
 
 CFLAGS+=-c -pedantic -Wall -Wshadow -Wformat -Wpointer-arith \
 	-Wstrict-prototypes -Wmissing-prototypes -Wwrite-strings \
@@ -43,8 +43,9 @@ CFLAGS+=-c -pedantic -Wall -Wshadow -Wformat -Wpointer-arith \
 	-I/usr/local/lib/ansi-include -std=c99 \
         $(CPPFLAGS) \
         $(OPTIMISE)
-
+	 
 CC=gcc
+LIBS=-lm
 
 # AIX 3.2 Users might like to use these alternatives for CFLAGS and CC.
 # Thanks to Erol Basturk for providing them.
@@ -52,7 +53,7 @@ AIX_CFLAGS=-c -D_POSIX_SOURCE -D_XOPEN_SOURCE -D_ALL_SOURCE
 AIX_CC=xlc
 
 pgn-extract : $(OBJS)
-	$(CC) $(DEBUGINFO) $(ORIGCFLAGS) $(CPPFLAGS) $(LDFLAGS) $(OBJS) -o pgn-extract
+	$(CC) $(DEBUGINFO) $(ORIGCFLAGS) $(CPPFLAGS) $(LDFLAGS) $(OBJS) $(LIBS) -o pgn-extract
 
 purify : $(OBJS)
 	purify $(CC) $(DEBUGINFO) $(OBJS) -o pgn-extract
@@ -70,7 +71,7 @@ apply.o :  apply.c defs.h lex.h grammar.h typedef.h map.h bool.h apply.h taglist
 
 argsfile.o : argsfile.c argsfile.h bool.h defs.h typedef.h lines.h \
 		taglist.h tokens.h lex.h taglines.h moves.h eco.h apply.h output.h \
-		lists.h mymalloc.h
+		lists.h mymalloc.h fenmatcher.h
 	$(CC) $(CFLAGS) argsfile.c
 
 decode.o : decode.c defs.h typedef.h taglist.h lex.h bool.h decode.h lists.h \
@@ -118,7 +119,8 @@ moves.o :  moves.c defs.h typedef.h lex.h bool.h map.h lists.h moves.h apply.h\
 	   lines.h taglist.h mymalloc.h fenmatcher.h
 	$(CC) $(CFLAGS) moves.c
 
-fenmatcher.o : fenmatcher.c grammar.h apply.h bool.h defs.h fenmatcher.h mymalloc.h typedef.h
+fenmatcher.o : fenmatcher.c grammar.h apply.h bool.h defs.h fenmatcher.h mymalloc.h\
+               typedef.h end.h
 	$(CC) $(CFLAGS) fenmatcher.c
 
 output.o :  output.c output.h taglist.h bool.h typedef.h defs.h lex.h grammar.h\

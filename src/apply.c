@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -888,6 +888,7 @@ apply_move(Move *move_details, Board *board)
 }
 
 /* Play out the moves on the given board.
+ * These could be either the main line or a variation.
  * game_details is updated with the final_ and cumulative_ hash values.
  * Check move validity unless a NULL_MOVE has been found in this
  * variation.
@@ -922,7 +923,9 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
      * from a FEN string, rather than being the normal starting
      * position.
      */
-    if (!game_matches && (match_label = position_matches(board)) != NULL) {
+    if (!game_matches &&
+            plies >= GlobalState.startply &&
+            (match_label = position_matches(board)) != NULL) {
         game_matches = TRUE;
         if (GlobalState.add_position_match_comments) {
             CommentList *comment = create_match_comment(board);
@@ -938,6 +941,9 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
               (next_move != NULL) &&
               (game_matches || (plies <= max_depth))) {
         if (*(next_move->move) != '\0') {
+            /* There might be a restriction on when to start checking for a match. */
+            Boolean check_for_match = plies >= GlobalState.startply;
+
             /* See if there are any variations associated with this move. */
             if ((next_move->Variants != NULL) && GlobalState.keep_variations) {
                 game_matches |= apply_variations(game_details, board,
@@ -957,7 +963,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
             if (check_move_validity) {
                 if (apply_move(next_move, board)) {
                     /* Don't try for a positional match if we already have one. */
-                    if (!game_matches && (match_label = position_matches(board)) != NULL) {
+                    if (check_for_match && !game_matches && (match_label = position_matches(board)) != NULL) {
                         game_matches = TRUE;
                         if (GlobalState.add_position_match_comments) {
                             CommentList *comment = create_match_comment(board);
@@ -966,7 +972,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                     }
                     /* Combine this hash value with the cumulative one. */
                     game_details->cumulative_hash_value += board->weak_hash_value;
-                    if (GlobalState.fuzzy_match_duplicates) {
+                    if (check_for_match && GlobalState.fuzzy_match_duplicates) {
                         /* Consider remembering this hash value for fuzzy matches. */
                         if (GlobalState.fuzzy_match_depth == plies) {
                             /* Remember it. */
@@ -974,7 +980,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                         }
                     }
 
-                    if (GlobalState.check_for_repetition) {
+                    if (check_for_match && GlobalState.check_for_repetition) {
                         Boolean repetition =
                             update_position_counts(game_details->position_counts, board);
                         if (repetition && GlobalState.add_position_match_comments) {
@@ -983,7 +989,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                         }
                     }
 
-                    if (GlobalState.check_for_fifty_move_rule && mainline) {
+                    if (check_for_match && GlobalState.check_for_fifty_move_rule && mainline) {
                         if (board->halfmove_clock >= 100) {
                             /* Fifty moves by both players with no pawn move or capture. */
                             fifty_move_rule_applies = TRUE;
@@ -994,7 +1000,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
                         }
                     }
 
-                    if(GlobalState.match_underpromotion &&
+                    if(check_for_match && GlobalState.match_underpromotion &&
                        next_move->class == PAWN_MOVE_WITH_PROMOTION) {
                          if(next_move->promoted_piece != QUEEN) {
                              underpromotion = TRUE;
@@ -1003,7 +1009,7 @@ play_moves(Game *game_details, Board *board, Move *moves, unsigned max_depth,
 
                     if (next_move->next == NULL && mainline) {
                         /* End of the game. */
-                        if (GlobalState.fuzzy_match_duplicates &&
+                        if (check_for_match && GlobalState.fuzzy_match_duplicates &&
                                 GlobalState.fuzzy_match_depth == 0) {
                             game_details->fuzzy_duplicate_hash = board->weak_hash_value;
                         }
@@ -2220,11 +2226,27 @@ position_matches(const Board *board)
             }
         }
     }
+    if(GlobalState.whose_move != EITHER_TO_MOVE) {
+        if(board->to_move == WHITE && GlobalState.whose_move == BLACK_TO_MOVE) {
+	    found = FALSE;
+	}
+        else if(board->to_move == BLACK && GlobalState.whose_move == WHITE_TO_MOVE) {
+	    found = FALSE;
+	}
+    }
     if (found) {
         return "";
     }
     else {
         const char *match_label = pattern_match_board(board);
+	if(GlobalState.whose_move != EITHER_TO_MOVE) {
+	    if(board->to_move == WHITE && GlobalState.whose_move == BLACK_TO_MOVE) {
+		match_label = NULL;
+	    }
+	    else if(board->to_move == BLACK && GlobalState.whose_move == WHITE_TO_MOVE) {
+		match_label = NULL;
+	    }
+	}
         return match_label;
     }
 }

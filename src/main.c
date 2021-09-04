@@ -1,6 +1,6 @@
 /*
  *  This file is part of pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David J. Barnes
+ *  Copyright (C) 1994-2021 David J. Barnes
  *
  *  pgn-extract is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -105,6 +105,7 @@ StateInfo GlobalState = {
     0,                  /* stability_threshold (--stable) */
     0,                  /* maximum_matches */
     0,                  /* drop_ply_number (--dropply) */
+    1,                  /* startply (--startply) */
     FALSE,              /* output_FEN_string */
     FALSE,              /* add_FEN_comments (--fencomments) */
     FALSE,              /* add_hashcode_comments (--hashcomments) */
@@ -113,6 +114,7 @@ StateInfo GlobalState = {
     FALSE,              /* output_total_plycount (--totalplycount) */
     FALSE,              /* add_hashcode_tag (--addhashcode) */
     FALSE,              /* fix_result_tags (--fixresulttags) */
+    FALSE,              /* fix_tag_strings (--fixtagstrings) */
     FALSE,              /* separate_comment_lines (--commentlines) */
     FALSE,              /* split_variants (--separatevariants) */
     FALSE,              /* reject_inconsistent_results (--nobadresults) */
@@ -124,9 +126,11 @@ StateInfo GlobalState = {
     0,                  /* split_depth_limit */
     NORMALFILE,         /* current_file_type */
     SETUP_TAG_OK,       /* setup_status */
-    "MATCH",            /* position_match_comment (--markpositionmatches) */
+    EITHER_TO_MOVE,     /* whose_move */
+    "MATCH",            /* position_match_comment (--markmatches) */
     (char *) NULL,      /* FEN_comment_pattern (-Fpattern) */
     (char *) NULL,      /* drop_comment_pattern (--dropbefore) */
+    (char *) NULL,      /* line_number_marker (--linenumbers) */
     (char *) NULL,      /* current_input_file */
     DEFAULT_ECO_FILE,   /* eco_file (-e) */
     (FILE *) NULL,      /* outputfile (-o, -a). Default is stdout */

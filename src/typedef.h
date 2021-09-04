@@ -1,6 +1,6 @@
 /*
  *  Program: pgn-extract: a Portable Game Notation (PGN) extractor.
- *  Copyright (C) 1994-2019 David Barnes
+ *  Copyright (C) 1994-2021 David Barnes
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 1, or (at your option)
@@ -174,6 +174,8 @@ typedef struct {
      * Used for repetition detection, if required.
      */
     struct PositionCount *position_counts;
+    /* Line numbers of the start and end of the game in the input file. */
+    unsigned long start_line, end_line;
 } Game;
 
 /* Define a type to distinguish between CHECK files, NORMAL files,
@@ -325,6 +327,8 @@ typedef struct {
      * of the game.
      */
     int drop_ply_number;
+    /* Starting ply for looking for matches. */
+    unsigned startply;
     
     /* Whether to output a FEN string. Either at the end of the game
      * or replacing a matching comment (see FEN_comment_pattern). */
@@ -343,6 +347,8 @@ typedef struct {
     Boolean add_hashcode_tag;
     /* Whether to fix a Result tag that does not match the game outcome. */
     Boolean fix_result_tags;
+    /* Whether to attempt to fix broken tag strings. */
+    Boolean fix_tag_strings;
     /* Whether comments should appear on separate lines. */
     Boolean separate_comment_lines;
     /* Whether to output each variation as a separate game. */
@@ -370,12 +376,17 @@ typedef struct {
     SourceFileType current_file_type;
     /* Whether SETUP_TAGs are ok in extracted games. */
     SetupOutputStatus setup_status;
+    /* For positional matches, whether the player to move matters. */
+    WhoseMove whose_move;
+
     /* The comment to use for position matches, if required. */
     const char *position_match_comment;
     /* The comment pattern to match for FEN comments (see output_FEN_string) */
     const char *FEN_comment_pattern;
     /* The comment pattern to match for dropping ply */
     const char *drop_comment_pattern;
+    /* The comment marker to use for input line numbers, if required. */
+    const char *line_number_marker;
     /* Current input file name. */
     const char *current_input_file;
     /* File of ECO lines. */
